@@ -1,18 +1,24 @@
 ﻿using System;
 using System.Data.Common;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using PopForums.Configuration;
 
 namespace PopForums.Sql
 {
 	public class SqlObjectFactory : ISqlObjectFactory
 	{
+		private readonly IConfig _config;
+
+		public SqlObjectFactory(IConfig config)
+		{
+			_config = config;
+		}
+
 		public DbConnection GetConnection()
 		{
-			var config = new Config();
-			if (String.IsNullOrWhiteSpace(config.DatabaseConnectionString))
+			if (string.IsNullOrWhiteSpace(_config.DatabaseConnectionString))
 				throw new Exception("No database connection string found for POP Forums.");
-			var connectionString = config.DatabaseConnectionString;
+			var connectionString = _config.DatabaseConnectionString;
             return new SqlConnection(connectionString);
 		}
 

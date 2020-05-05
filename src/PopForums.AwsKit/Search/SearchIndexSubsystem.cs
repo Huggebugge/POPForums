@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using Nest;
+using Polly;
 using PopForums.Configuration;
 using PopForums.Services;
 
@@ -9,31 +10,35 @@ namespace PopForums.AwsKit.Search
 	public class SearchIndexSubsystem : ISearchIndexSubsystem
 	{
 		private readonly ITextParsingService _textParsingService;
-		private readonly ISearchService _searchService;
 		private readonly IPostService _postService;
 		private readonly ITopicService _topicService;
 		private readonly IErrorLog _errorLog;
 		private readonly IElasticSearchClientWrapper _elasticSearchClientWrapper;
 
-		public SearchIndexSubsystem(ITextParsingService textParsingService, ISearchService searchService, IPostService postService, ITopicService topicService, IErrorLog errorLog, IElasticSearchClientWrapper elasticSearchClientWrapper)
+		public SearchIndexSubsystem(ITextParsingService textParsingService, IPostService postService, ITopicService topicService, IErrorLog errorLog, IElasticSearchClientWrapper elasticSearchClientWrapper)
 		{
 			_textParsingService = textParsingService;
-			_searchService = searchService;
 			_postService = postService;
 			_topicService = topicService;
 			_errorLog = errorLog;
 			_elasticSearchClientWrapper = elasticSearchClientWrapper;
 		}
 
-		public void DoIndex(int topicID, string tenantID)
+		public void DoIndex(int topicID, string tenantID, bool isForRemoval)
 		{
-			var topic = _topicService.Get(topicID);
+			if (isForRemoval)
+			{
+				RemoveIndex(topicID, tenantID);
+				return;
+			}
+
+			var topic = _topicService.Get(topicID).Result;
 			if (topic == null)
 				return;
 
 			_elasticSearchClientWrapper.VerifyIndexCreate();
 
-			var posts = _postService.GetPosts(topic, false);
+			var posts = _postService.GetPosts(topic, false).Result;
 			if (posts.Count == 0)
 				throw new Exception($"TopicID {topic.TopicID} has no posts to index.");
 			var firstPost = _textParsingService.ClientHtmlToForumCode(posts[0].FullText);
@@ -47,7 +52,8 @@ namespace PopForums.AwsKit.Search
 			}).ToArray();
 			var searchTopic = new SearchTopic
 			{
-				Id = topic.TopicID.ToString(),
+				Id = $"{tenantID}-{topic.TopicID}",
+				TopicID = topic.TopicID,
 				ForumID = topic.ForumID,
 				Title = topic.Title,
 				LastPostTime = topic.LastPostTime,
@@ -65,19 +71,42 @@ namespace PopForums.AwsKit.Search
 
 			try
 			{
-				var indexResult = _elasticSearchClientWrapper.IndexTopic(searchTopic);
-				if (indexResult.Result != Result.Created && indexResult.Result != Result.Updated)
+				var policy = Polly.Policy.HandleResult<IndexResponse>(x => !x.IsValid)
+					.WaitAndRetry(new[]
+					{
+						TimeSpan.FromSeconds(1),
+						TimeSpan.FromSeconds(5),
+						TimeSpan.FromSeconds(30)
+					}, (exception, timeSpan) => {
+						_errorLog.Log(exception.Result.OriginalException, ErrorSeverity.Error, $"Retry after {timeSpan.Seconds}: {exception.Result.DebugInformation}");
+					});
+				policy.Execute(() =>
 				{
-					_errorLog.Log(indexResult.OriginalException, ErrorSeverity.Error, $"Debug information: {indexResult.DebugInformation}");
-					// TODO: Replace this with some Polly or get real about queues/deadletter
-					_topicService.QueueTopicForIndexing(topic.TopicID);
+					var indexResult = _elasticSearchClientWrapper.IndexTopic(searchTopic);
+					return indexResult;
+				});
+			}
+			catch (Exception exc)
+			{
+				_errorLog.Log(exc, ErrorSeverity.Error);
+			}
+		}
+
+		public void RemoveIndex(int topicID, string tenantID)
+		{
+			var id = $"{tenantID}-{topicID}";
+
+			try
+			{
+				var result = _elasticSearchClientWrapper.RemoveTopic(id);
+				if (result.Result != Result.Deleted)
+				{
+					_errorLog.Log(result.OriginalException, ErrorSeverity.Error, $"Debug information: {result.DebugInformation}");
 				}
 			}
 			catch (Exception exc)
 			{
 				_errorLog.Log(exc, ErrorSeverity.Error);
-				// TODO: Replace this with some Polly or get real about queues/deadletter
-				_topicService.QueueTopicForIndexing(topic.TopicID);
 			}
 		}
 	}

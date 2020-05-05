@@ -4,8 +4,8 @@
 @{
 	ViewBag.Title = Model.Forum.Title;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
-	var user = UserRetrievalShim.GetUser(Context);
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var user = UserRetrievalShim.GetUser();
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent{
@@ -21,29 +21,22 @@
 	</script>
 }
 
-<div>
-	<h1>
-		@Model.Forum.Title@if (Model.PermissionContext.UserCanPost)
-	{ <input type="button" value="@PopForums.Resources.AskAQuestion" id="NewTopicButton" class="btn btn-primary" />}
-	</h1>
-	@if (Model.PermissionContext.UserCanPost)
-	{
-		<div id="NewTopic" style="display: none;"></div>
-	}
-	else
-	{
-		<p class="alert alert-warning">@Model.PermissionContext.DenialReason</p>
-	}
-	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-	</ul>
-	<ul id="FixedBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-		<li class="breadcrumb-item active">@Model.Forum.Title</li>
-	</ul>
-</div>
+<h1>@Model.Forum.Title@if (Model.PermissionContext.UserCanPost){ <input type="button" value="@PopForums.Resources.AskAQuestion" id="NewTopicButton" class="btn btn-primary" />}</h1>
+
+@if (Model.PermissionContext.UserCanPost)
+{
+	<div id="NewTopic" style="display: none;"></div>
+}
+else
+{
+	<p class="alert alert-warning">@Model.PermissionContext.DenialReason</p>
+}
+
+<ul id="TopBreadcrumb" class="breadcrumb sticky-top">
+	<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
+	<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
+	<li class="breadcrumb-item active">@Model.Forum.Title</li>
+</ul>
 
 <pf-pagerLinks controllerName="Forum" actionName="Index" pagerContext="@Model.PagerContext" class="pagination pagination-sm pagerLinks" moreTextClass="morePager" currentTextClass="currentPager active" />
 
@@ -54,7 +47,7 @@
 	</form>
 }
 
-<table id="TopicList" class="table grid table-hover">
+<table id="TopicList" class="table mt-3 table-hover">
 	@foreach (var topic in Model.Topics)
 	{
 		<tr @if (topic.IsDeleted) { <text> class="bg-warning" </text> } data-topicid="@topic.TopicID">
@@ -73,7 +66,7 @@
 			</td>
 			<td>
 				<h2><a asp-controller="@ForumController.Name" asp-action="Topic" asp-route-id="@topic.UrlName">@topic.Title</a></h2>
-				<small class="float-right">
+				<small class="float-right d-none d-sm-block">
 					@PopForums.Resources.StartedBy: @topic.StartedByName | @PopForums.Resources.Views: @topic.ViewCount.ToString("N0") | @PopForums.Resources.Replies: @topic.ReplyCount.ToString("N0") | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc="@topic.LastPostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(topic.LastPostTime, profile)</span> @PopForums.Resources.By @topic.LastPostName
 				</small>
 			</td>

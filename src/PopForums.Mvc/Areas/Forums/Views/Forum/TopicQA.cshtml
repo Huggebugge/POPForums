@@ -4,8 +4,8 @@
 @{
 	ViewBag.Title = Model.Topic.Title;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
-	var user = UserRetrievalShim.GetUser(Context);
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var user = UserRetrievalShim.GetUser();
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent {
@@ -17,20 +17,14 @@
 </script>
 }
 
-<div>
-	<h1>@Model.Topic.Title</h1>
-	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Index" asp-route-urlName="@Model.Forum.UrlName" asp-route-page="1">@Model.Forum.Title</a></li>
-	</ul>
-	<ul id="FixedBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Index" asp-route-urlName="@Model.Forum.UrlName" asp-route-page="1">@Model.Forum.Title</a></li>
-		<li class="breadcrumb-item active">@Model.Topic.Title</li>
-	</ul>
-</div>
+<h1>@Model.Topic.Title</h1>
+
+<ul id="TopBreadcrumb" class="breadcrumb sticky-top">
+	<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent">@PopForums.Resources.Recent</a></li>
+	<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
+	<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Index" asp-route-urlName="@Model.Forum.UrlName" asp-route-pageNumber="1">@Model.Forum.Title</a></li>
+	<li class="breadcrumb-item active">@Model.Topic.Title</li>
+</ul>
 
 @if (user != null) {
 	<p id="AsyncResponse"></p>
@@ -78,24 +72,24 @@ else
 		<ul class="list-inline">
 			<li class="list-inline-item">
 				<form asp-action="ToggleDeleted" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Topic.TopicID" class="inlineModForm">
-					<input type="submit" value="@(Model.Topic.IsDeleted ? PopForums.Resources.Undelete : PopForums.Resources.Delete)" class="btn btn-warning" />
+					<input type="submit" value="@(Model.Topic.IsDeleted ? PopForums.Resources.Undelete : PopForums.Resources.Delete)" class="btn btn-warning mt-2" />
 				</form>
 			</li>
 			<li class="list-inline-item">
 				<form asp-action="TogglePin" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Topic.TopicID" class="inlineModForm">
-					<input type="submit" value="@(Model.Topic.IsPinned ? PopForums.Resources.Unpin : PopForums.Resources.Pin)" class="btn btn-warning" />
+					<input type="submit" value="@(Model.Topic.IsPinned ? PopForums.Resources.Unpin : PopForums.Resources.Pin)" class="btn btn-warning mt-2" />
 				</form>
 			</li>
 			<li class="list-inline-item">
 				<form asp-action="ToggleClosed" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Topic.TopicID" class="inlineModForm">
-					<input type="submit" value="@(Model.Topic.IsClosed ? PopForums.Resources.Open : PopForums.Resources.Close)" class="btn btn-warning" />
+					<input type="submit" value="@(Model.Topic.IsClosed ? PopForums.Resources.Open : PopForums.Resources.Close)" class="btn btn-warning mt-2" />
 				</form>
 			</li>
 			@if (user.IsInRole(PermanentRoles.Admin))
 			{
 				<li class="list-inline-item">
 					<form asp-action="DeleteTopicPermanently" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Topic.TopicID" class="inlineModForm">
-						<input type="submit" value="@PopForums.Resources.DeletePermanently" class="btn btn-warning" />
+						<input type="submit" value="@PopForums.Resources.DeletePermanently" class="btn btn-warning mt-2" />
 					</form>
 				</li>
 			}

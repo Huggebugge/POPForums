@@ -27,16 +27,16 @@
 }
 else
 {
-	<table class="table grid table-hover">
+	<table class="table mt-3 table-hover">
 		@foreach (var item in Model)
 		{
-			<tr>
-				<td class="col-2">
+			<tr class="row">
+				<td class="col-3">
 					<form asp-action="RemoveExternalLogin" asp-route-id="@item.ExternalUserAssociationID" method="post">
 						<input type="submit" value="Remove" class="btn btn-primary" />
 					</form>
 				</td>
-				<td class="col-4">@item.Issuer</td>
+				<td class="col-3">@item.Issuer</td>
 				<td class="col-6">@item.Name</td>
 			</tr>
 		}

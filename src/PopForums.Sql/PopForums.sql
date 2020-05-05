@@ -6,18 +6,14 @@ CREATE TABLE [dbo].[pf_PopForumsUser](
 	[Email] [nvarchar](256) NOT NULL,
 	[CreationDate] [datetime] NOT NULL,
 	[IsApproved] [bit] NOT NULL DEFAULT ((-1)),
-	[LastActivityDate] [datetime] NOT NULL,
-	[LastLoginDate] [datetime] NOT NULL,
 	[Password] [nvarchar](256) NOT NULL,
 	[AuthorizationKey] [uniqueidentifier] NOT NULL DEFAULT ('00000000-0000-0000-0000-000000000000'),
 	[Salt] [uniqueidentifier] NULL
 ) 
 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_PopForumsUser_UserName] ON [dbo].[pf_PopForumsUser]([Name])
+CREATE UNIQUE NONCLUSTERED INDEX [IX_PopForumsUser_Email] ON [dbo].[pf_PopForumsUser]([Email])
 
-CREATE INDEX [IX_PopForumsUser_UserName] ON [dbo].[pf_PopForumsUser]([Name]) 
-
-
-CREATE INDEX [IX_PopForumsUser_Email] ON [dbo].[pf_PopForumsUser]([Email]) 
 
 
 
@@ -51,6 +47,21 @@ REFERENCES [dbo].[pf_PopForumsUser] ([UserID])
 ON DELETE CASCADE
 
 ALTER TABLE [dbo].[pf_Profile] CHECK CONSTRAINT [FK_pf_Profile_pf_PopForumsUser]
+
+
+-- ******************************************************** pf_UserActivity
+
+CREATE TABLE [dbo].[pf_UserActivity](
+	[UserID] [int] NOT NULL PRIMARY KEY CLUSTERED,
+	[LastActivityDate] [datetime] NOT NULL,
+	[LastLoginDate] [datetime] NOT NULL
+)
+
+ALTER TABLE [dbo].[pf_UserActivity]  WITH CHECK ADD  CONSTRAINT [FK_pf_UserActivity_pf_PopForumsUser] FOREIGN KEY([UserID])
+REFERENCES [dbo].[pf_PopForumsUser] ([UserID])
+ON DELETE CASCADE
+
+ALTER TABLE [dbo].[pf_UserActivity] CHECK CONSTRAINT [FK_pf_UserActivity_pf_PopForumsUser]
 
 
 

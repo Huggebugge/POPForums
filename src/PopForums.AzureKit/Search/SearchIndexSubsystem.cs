@@ -5,6 +5,7 @@ using Microsoft.Azure.Search;
 using Microsoft.Azure.Search.Models;
 using PopForums.Configuration;
 using PopForums.Services;
+using Index = Microsoft.Azure.Search.Models.Index;
 
 namespace PopForums.AzureKit.Search
 {
@@ -28,16 +29,22 @@ namespace PopForums.AzureKit.Search
 			_errorLog = errorLog;
 		}
 
-		public void DoIndex(int topicID, string tenantID)
+		public void DoIndex(int topicID, string tenantID, bool isForRemoval)
 		{
-			var topic = _topicService.Get(topicID);
+			if (isForRemoval)
+			{
+				RemoveIndex(topicID, tenantID);
+				return;
+			}
+
+			var topic = _topicService.Get(topicID).Result;
 			if (topic != null)
 			{
 				var serviceClient = new SearchServiceClient(_config.SearchUrl, new SearchCredentials(_config.SearchKey));
 				if (!serviceClient.Indexes.Exists(IndexName))
 					CreateIndex(serviceClient);
 
-				var posts = _postService.GetPosts(topic, false).ToArray();
+				var posts = _postService.GetPosts(topic, false).Result.ToArray();
 				var parsedPosts = posts.Select(x =>
 					{
 						var parsedText = _textParsingService.ClientHtmlToForumCode(x.FullText);
@@ -46,6 +53,7 @@ namespace PopForums.AzureKit.Search
 					}).ToArray();
 				var searchTopic = new SearchTopic
 				{
+					Key = $"{tenantID}-{topicID}",
 					TopicID = topic.TopicID.ToString(),
 					ForumID = topic.ForumID,
 					Title = topic.Title,
@@ -80,14 +88,35 @@ namespace PopForums.AzureKit.Search
 		    }
 	    }
 
-	    private static void CreateIndex(SearchServiceClient serviceClient)
+		public void RemoveIndex(int topicID, string tenantID)
+		{
+			var key = $"{tenantID}-{topicID}";
+			try
+			{
+				var actions = new[]
+				{
+						IndexAction.Delete("key", key)
+				};
+				var serviceClient = new SearchServiceClient(_config.SearchUrl, new SearchCredentials(_config.SearchKey));
+				var serviceIndexClient = serviceClient.Indexes.GetClient(IndexName);
+				var batch = IndexBatch.New(actions);
+				serviceIndexClient.Documents.Index(batch);
+			}
+			catch (Exception exc)
+			{
+				_errorLog.Log(exc, ErrorSeverity.Error);
+			}
+		}
+
+		private static void CreateIndex(SearchServiceClient serviceClient)
 	    {
 		    var indexDefinition = new Index
 		    {
 			    Name = IndexName,
 			    Fields = new[]
-			    {
-				    new Field("topicID", DataType.String) {IsKey = true, IsSearchable = false},
+				{
+					new Field("key", DataType.String) {IsKey = true, IsSearchable = false},
+					new Field("topicID", DataType.String) {IsSearchable = false},
 				    new Field("forumID", DataType.Int32) {IsFilterable = true, IsSearchable = false},
 				    new Field("title", DataType.String) {IsSearchable = true, IsSortable = true},
 					new Field("lastPostTime", DataType.DateTimeOffset) {IsSortable = true, IsSearchable = false},

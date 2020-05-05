@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using PopForums.Mvc.Areas.Forums.Extensions;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.Services;
 
@@ -22,15 +24,18 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly IUserSessionService _userSessionService;
 		private readonly IUserRetrievalShim _userRetrievalShim;
 
-		public ViewResult Index()
+		public async Task<ViewResult> Index()
 		{
-			ViewBag.OnlineUsers = _userService.GetUsersOnline();
-			ViewBag.TotalUsers = _userSessionService.GetTotalSessionCount().ToString("N0");
-			ViewBag.TopicCount = _forumService.GetAggregateTopicCount().ToString("N0");
-			ViewBag.PostCount = _forumService.GetAggregatePostCount().ToString("N0");
-			ViewBag.RegisteredUsers = _userService.GetTotalUsers().ToString("N0");
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			return View(_forumService.GetCategorizedForumContainerFilteredForUser(user));
+			ViewBag.OnlineUsers = await _userService.GetUsersOnline();
+			var sessionCount = await _userSessionService.GetTotalSessionCount();
+			ViewBag.TotalUsers = sessionCount.ToString("N0");
+			ViewBag.TopicCount = _forumService.GetAggregateTopicCount().Result.ToString("N0");
+			ViewBag.PostCount = _forumService.GetAggregatePostCount().Result.ToString("N0");
+			var registeredUsers = await _userService.GetTotalUsers();
+			ViewBag.RegisteredUsers = registeredUsers.ToString("N0");
+			var user = _userRetrievalShim.GetUser();
+			ViewBag.SitemapUrl = this.FullUrlHelper("Index", SitemapController.Name);
+			return View(await _forumService.GetCategorizedForumContainerFilteredForUser(user));
 		}
 	}
 }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using PopForums.Configuration;
 using PopForums.Email;
 using PopForums.Extensions;
@@ -11,48 +12,47 @@ namespace PopForums.Services
 {
 	public interface IUserService
 	{
-		void SetPassword(User targetUser, string password, string ip, User user);
-		bool CheckPassword(string email, string password, out Guid? salt);
-		User GetUser(int userID);
-		User GetUserByName(string name);
-		User GetUserByEmail(string email);
-		User GetUserByAuhtorizationKey(Guid authorizationKey);
-		bool IsNameInUse(string name);
-		bool IsEmailInUse(string email);
-		User CreateUser(SignupData signupData, string ip);
-		User CreateUser(string name, string email, string password, bool isApproved, string ip);
-		void DeleteUser(User targetUser, User user, string ip, bool ban);
-		void UpdateLastActicityDate(User user);
-		void ChangeEmail(User targetUser, string newEmail, User user, string ip);
-		void ChangeEmail(User targetUser, string newEmail, User user, string ip, bool isUserApproved);
-		void ChangeName(User targetUser, string newName, User user, string ip);
-		void UpdateIsApproved(User targetUser, bool isApproved, User user, string ip);
-		void UpdateAuthorizationKey(User user, Guid key);
-		void Logout(User user, string ip);
-		bool Login(string email, string password, string ip, out User user);
-		void Login(User user, string ip);
-		List<string> GetAllRoles();
-		void CreateRole(string role, User user, string ip);
-		void DeleteRole(string role, User user, string ip);
-		User VerifyAuthorizationCode(Guid key, string ip);
-		List<User> SearchByEmail(string email);
-		List<User> SearchByName(string name);
-		List<User> SearchByRole(string role);
-		void EditUser(User targetUser, UserEdit userEdit, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile, string ip, User user);
-		void EditUserProfileImages(User user, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile);
-		UserEdit GetUserEdit(User user);
-		void EditUserProfile(User user, UserEditProfile userEditProfile);
-		bool VerifyPassword(User user, string password);
+		Task SetPassword(User targetUser, string password, string ip, User user);
+		Task<Tuple<bool, Guid?>> CheckPassword(string email, string password);
+		Task<User> GetUser(int userID);
+		Task<User> GetUserByName(string name);
+		Task<User> GetUserByEmail(string email);
+		Task<User> GetUserByAuhtorizationKey(Guid authorizationKey);
+		Task<bool> IsNameInUse(string name);
+		Task<bool> IsEmailInUse(string email);
+		Task<User> CreateUser(SignupData signupData, string ip);
+		Task<User> CreateUser(string name, string email, string password, bool isApproved, string ip);
+		Task DeleteUser(User targetUser, User user, string ip, bool ban);
+		Task UpdateLastActivityDate(User user);
+		Task ChangeEmail(User targetUser, string newEmail, User user, string ip);
+		Task ChangeEmail(User targetUser, string newEmail, User user, string ip, bool isUserApproved);
+		Task ChangeName(User targetUser, string newName, User user, string ip);
+		Task UpdateIsApproved(User targetUser, bool isApproved, User user, string ip);
+		Task UpdateAuthorizationKey(User user, Guid key);
+		Task Logout(User user, string ip);
+		Task<Tuple<bool, User>> Login(string email, string password, string ip);
+		Task Login(User user, string ip);
+		Task<List<string>> GetAllRoles();
+		Task CreateRole(string role, User user, string ip);
+		Task DeleteRole(string role, User user, string ip);
+		Task<User> VerifyAuthorizationCode(Guid key, string ip);
+		Task<List<User>> SearchByEmail(string email);
+		Task<List<User>> SearchByName(string name);
+		Task<List<User>> SearchByRole(string role);
+		Task EditUser(User targetUser, UserEdit userEdit, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile, string ip, User user);
+		Task EditUserProfileImages(User user, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile);
+		Task<UserEdit> GetUserEdit(User user);
+		Task EditUserProfile(User user, UserEditProfile userEditProfile);
 		bool IsPasswordValid(string password, out string errorMessage);
-        bool IsEmailInUseByDifferentUser(User user, string email);
-		List<User> GetUsersOnline();
-		bool IsIPBanned(string ip);
-		bool IsEmailBanned(string email);
-		void GeneratePasswordResetEmail(User user, string resetLink);
-		void ResetPassword(User user, string newPassword, string ip);
-		List<User> GetUsersFromIDs(IList<int> ids);
-		int GetTotalUsers();
-		List<User> GetSubscribedUsers();
+        Task<bool> IsEmailInUseByDifferentUser(User user, string email);
+		Task<List<User>> GetUsersOnline();
+		Task<bool> IsIPBanned(string ip);
+		Task<bool> IsEmailBanned(string email);
+		Task GeneratePasswordResetEmail(User user, string resetLink);
+		Task ResetPassword(User user, string newPassword, string ip);
+		Task<List<User>> GetUsersFromIDs(IList<int> ids);
+		Task<int> GetTotalUsers();
+		Task<List<User>> GetSubscribedUsers();
 		Dictionary<User, int> GetUsersByPointTotals(int top);
 	}
 
@@ -70,7 +70,7 @@ namespace PopForums.Services
 		private readonly IForgotPasswordMailer _forgotPasswordMailer;
 		private readonly IImageService _imageService;
 
-			// TODO: Dependencies on formsauth wrapper and imageservice
+		// TODO: Dependencies on imageservice
 		public UserService(IUserRepository userRepository, IRoleRepository roleRepository, IProfileRepository profileRepository, ISettingsManager settingsManager, IUserAvatarRepository userAvatarRepository, IUserImageRepository userImageRepository, ISecurityLogService securityLogService, ITextParsingService textParsingService, IBanRepository banRepository, IForgotPasswordMailer forgotPasswordMailer, IImageService imageService
 			)
 		{
@@ -87,283 +87,307 @@ namespace PopForums.Services
 			_imageService = imageService;
 		}
 
-		public void SetPassword(User targetUser, string password, string ip, User user)
+		public async Task SetPassword(User targetUser, string password, string ip, User user)
 		{
 			var salt = Guid.NewGuid();
-			var hashedPassword = password.GetMD5Hash(salt);
-			_userRepository.SetHashedPassword(targetUser, hashedPassword, salt);
-			_securityLogService.CreateLogEntry(user, targetUser, ip, String.Empty, SecurityLogType.PasswordChange);
+			var hashedPassword = password.GetSHA256Hash(salt);
+			await _userRepository.SetHashedPassword(targetUser, hashedPassword, salt);
+			await _securityLogService.CreateLogEntry(user, targetUser, ip, string.Empty, SecurityLogType.PasswordChange);
 		}
 
-		public bool CheckPassword(string email, string password, out Guid? salt)
+		public async Task<Tuple<bool, Guid?>> CheckPassword(string email, string password)
 		{
 			string hashedPassword;
-			var storedHash = _userRepository.GetHashedPasswordByEmail(email, out salt);
+			var (storedHash, salt) = await _userRepository.GetHashedPasswordByEmail(email);
+			if (salt.HasValue)
+				hashedPassword = password.GetSHA256Hash(salt.Value);
+			else
+				hashedPassword = password.GetSHA256Hash();
+			if (storedHash == hashedPassword)
+				return Tuple.Create(true, salt);
+			// legacy check
+			var oldResult = await CheckOldHashedPassword(email, password, salt, storedHash);
+			return Tuple.Create(oldResult, salt);
+		}
+
+		/// <summary>
+		/// This method is used to maintain compatibility with really old and crusty instances of POP Forums
+		/// that used MD5 to hash passwords. It upgrades those passwords if they match.
+		/// </summary>
+		private async Task<bool> CheckOldHashedPassword(string email, string password, Guid? salt, string storedHash)
+		{
+			string hashedPassword;
 			if (salt.HasValue)
 				hashedPassword = password.GetMD5Hash(salt.Value);
 			else
 				hashedPassword = password.GetMD5Hash();
-			return storedHash == hashedPassword;
+			if (storedHash == hashedPassword)
+			{
+				// upgrade the password hash
+				var user = await _userRepository.GetUserByEmail(email);
+				await SetPassword(user, password, string.Empty, null);
+				return true;
+			}
+			return false;
 		}
 
-		public User GetUser(int userID)
+		public async Task<User> GetUser(int userID)
 		{
-			var user = _userRepository.GetUser(userID);
-			PopulateRoles(user);
+			var user = await _userRepository.GetUser(userID);
+			await PopulateRoles(user);
 			return user;
 		}
 
-		public User GetUserByName(string name)
+		public async Task<User> GetUserByName(string name)
 		{
 			if (string.IsNullOrWhiteSpace(name))
 				return null;
-			var user = _userRepository.GetUserByName(name);
-			PopulateRoles(user);
-			return user;
-		}
-
-		public User GetUserByAuhtorizationKey(Guid authorizationKey)
-		{
-			var user = _userRepository.GetUserByAuthorizationKey(authorizationKey);
-			PopulateRoles(user);
-			return user;
-		}
-
-		public User GetUserByEmail(string email)
-		{
-			if (String.IsNullOrWhiteSpace(email))
+			var user = await _userRepository.GetUserByName(name);
+			if (user == null)
 				return null;
-			var user = _userRepository.GetUserByEmail(email);
-			PopulateRoles(user);
+			await PopulateRoles(user);
 			return user;
 		}
 
-		public List<User> GetUsersFromIDs(IList<int> ids)
+		public async Task<User> GetUserByAuhtorizationKey(Guid authorizationKey)
 		{
-			return _userRepository.GetUsersFromIDs(ids);
+			var user = await _userRepository.GetUserByAuthorizationKey(authorizationKey);
+			await PopulateRoles(user);
+			return user;
 		}
 
-		private void PopulateRoles(User user)
+		public async Task<User> GetUserByEmail(string email)
+		{
+			if (string.IsNullOrWhiteSpace(email))
+				return null;
+			var user = await _userRepository.GetUserByEmail(email);
+			await PopulateRoles(user);
+			return user;
+		}
+
+		public async Task<List<User>> GetUsersFromIDs(IList<int> ids)
+		{
+			return await _userRepository.GetUsersFromIDs(ids);
+		}
+
+		private async Task PopulateRoles(User user)
 		{
 			if (user != null)
-				user.Roles = _roleRepository.GetUserRoles(user.UserID);
+				user.Roles = await _roleRepository.GetUserRoles(user.UserID);
 		}
 
-		public bool IsNameInUse(string name)
+		public async Task<bool> IsNameInUse(string name)
 		{
-			return GetUserByName(name) != null;
+			return await GetUserByName(name) != null;
 		}
 
-		public bool IsEmailInUse(string email)
+		public async Task<bool> IsEmailInUse(string email)
 		{
-			return GetUserByEmail(email) != null;
+			return await GetUserByEmail(email) != null;
 		}
 
-		public bool IsEmailInUseByDifferentUser(User user, string email)
+		public async Task<bool> IsEmailInUseByDifferentUser(User user, string email)
 		{
-			var otherUser = GetUserByEmail(email);
+			var otherUser = await GetUserByEmail(email);
 			if (otherUser == null)
 				return false;
 			return otherUser.Email != user.Email;
 		}
 
-		public bool IsIPBanned(string ip)
+		public async Task<bool> IsIPBanned(string ip)
 		{
-			return _banRepository.IPIsBanned(ip);
+			return await _banRepository.IPIsBanned(ip);
 		}
 
-		public bool IsEmailBanned(string email)
+		public async Task<bool> IsEmailBanned(string email)
 		{
-			return _banRepository.EmailIsBanned(email);
+			return await _banRepository.EmailIsBanned(email);
 		}
 
-		public User CreateUser(SignupData signupData, string ip)
+		public async Task<User> CreateUser(SignupData signupData, string ip)
 		{
-			return CreateUser(signupData.Name, signupData.Email, signupData.Password, _settingsManager.Current.IsNewUserApproved, ip);
+			return await CreateUser(signupData.Name, signupData.Email, signupData.Password, _settingsManager.Current.IsNewUserApproved, ip);
 		}
 
-		public User CreateUser(string name, string email, string password, bool isApproved, string ip)
+		public async Task<User> CreateUser(string name, string email, string password, bool isApproved, string ip)
 		{
 			name = _textParsingService.Censor(name);
 			if (!email.IsEmailAddress())
 				throw new Exception("E-mail address invalid.");
-			if (String.IsNullOrEmpty(name))
+			if (string.IsNullOrEmpty(name))
 				throw new Exception("Name must not be empty or null.");
-			if (IsNameInUse(name))
-				throw new Exception(String.Format("The name \"{0}\" is already in use.", name));
-			if (IsEmailInUse(email))
-				throw new Exception(String.Format("The e-mail \"{0}\" is already in use.", email));
-			if (IsIPBanned(ip))
-				throw new Exception(String.Format("The IP {0} is banned.", ip));
-			if (IsEmailBanned(email))
-				throw new Exception(String.Format("The e-mail {0} is banned.", email));
+			if (await IsNameInUse(name))
+				throw new Exception($"The name \"{name}\" is already in use.");
+			if (await IsEmailInUse(email))
+				throw new Exception($"The e-mail \"{email}\" is already in use.");
+			if (await IsIPBanned(ip))
+				throw new Exception($"The IP {ip} is banned.");
+			if (await IsEmailBanned(email))
+				throw new Exception($"The e-mail {email} is banned.");
 			var creationDate = DateTime.UtcNow;
 			var authorizationKey = Guid.NewGuid();
 			var salt = Guid.NewGuid();
-			var hashedPassword = password.GetMD5Hash(salt);
-			var user = _userRepository.CreateUser(name, email, creationDate, isApproved, hashedPassword, authorizationKey, salt);
-			_securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.UserCreated);
+			var hashedPassword = password.GetSHA256Hash(salt);
+			var user = await _userRepository.CreateUser(name, email, creationDate, isApproved, hashedPassword, authorizationKey, salt);
+			await _securityLogService.CreateLogEntry(null, user, ip, string.Empty, SecurityLogType.UserCreated);
 			return user;
 		}
 
-		public void DeleteUser(User targetUser, User user, string ip, bool ban)
+		public async Task DeleteUser(User targetUser, User user, string ip, bool ban)
 		{
 			if (ban)
-				_banRepository.BanEmail(targetUser.Email);
-			_userRepository.DeleteUser(targetUser);
-			_securityLogService.CreateLogEntry(user, targetUser, ip, String.Format("Name: {0}, E-mail: {1}", targetUser.Name, targetUser.Email), SecurityLogType.UserDeleted);
+				await _banRepository.BanEmail(targetUser.Email);
+			await _userRepository.DeleteUser(targetUser);
+			await _securityLogService.CreateLogEntry(user, targetUser, ip, $"Name: {targetUser.Name}, E-mail: {targetUser.Email}", SecurityLogType.UserDeleted);
 		}
 
-		public void UpdateLastActicityDate(User user)
+		public async Task UpdateLastActivityDate(User user)
 		{
-			user.LastActivityDate = DateTime.UtcNow;
-			_userRepository.UpdateLastActivityDate(user, user.LastActivityDate);
+			await _userRepository.UpdateLastActivityDate(user, DateTime.UtcNow);
 		}
 
-		public void ChangeEmail(User targetUser, string newEmail, User user, string ip)
+		public async Task ChangeEmail(User targetUser, string newEmail, User user, string ip)
 		{
-			ChangeEmail(targetUser, newEmail, user, ip, _settingsManager.Current.IsNewUserApproved);
+			await ChangeEmail(targetUser, newEmail, user, ip, _settingsManager.Current.IsNewUserApproved);
 		}
 
-		public void ChangeEmail(User targetUser, string newEmail, User user, string ip, bool isUserApproved)
+		public async Task ChangeEmail(User targetUser, string newEmail, User user, string ip, bool isUserApproved)
 		{
 			if (!newEmail.IsEmailAddress())
 				throw new Exception("E-mail address invalid.");
-			if (IsEmailInUse(newEmail))
-				throw new Exception(String.Format("The e-mail \"{0}\" is already in use.", newEmail));
+			if (await IsEmailInUse(newEmail))
+				throw new Exception($"The e-mail \"{newEmail}\" is already in use.");
 			var oldEmail = targetUser.Email;
-			_userRepository.ChangeEmail(targetUser, newEmail);
+			await _userRepository.ChangeEmail(targetUser, newEmail);
 			targetUser.Email = newEmail;
-			_userRepository.UpdateIsApproved(targetUser, isUserApproved);
-			_securityLogService.CreateLogEntry(user, targetUser, ip, String.Format("Old: {0}, New: {1}", oldEmail, newEmail), SecurityLogType.EmailChange);
+			await _userRepository.UpdateIsApproved(targetUser, isUserApproved);
+			await _securityLogService.CreateLogEntry(user, targetUser, ip, $"Old: {oldEmail}, New: {newEmail}", SecurityLogType.EmailChange);
 		}
 
-		public void ChangeName(User targetUser, string newName, User user, string ip)
+		public async Task ChangeName(User targetUser, string newName, User user, string ip)
 		{
-			if (String.IsNullOrEmpty(newName))
+			if (string.IsNullOrEmpty(newName))
 				throw new Exception("Name must not be empty or null.");
-			if (IsNameInUse(newName))
-				throw new Exception(String.Format("The name \"{0}\" is already in use.", newName));
+			if (await IsNameInUse(newName))
+				throw new Exception($"The name \"{newName}\" is already in use.");
 			var oldName = targetUser.Name;
-			_userRepository.ChangeName(targetUser, newName);
+			await _userRepository.ChangeName(targetUser, newName);
 			targetUser.Name = newName;
-			_securityLogService.CreateLogEntry(user, targetUser, ip, String.Format("Old: {0}, New: {1}", oldName, newName), SecurityLogType.NameChange);
+			await _securityLogService.CreateLogEntry(user, targetUser, ip, $"Old: {oldName}, New: {newName}", SecurityLogType.NameChange);
 		}
 
-		public void UpdateIsApproved(User targetUser, bool isApproved, User user, string ip)
+		public async Task UpdateIsApproved(User targetUser, bool isApproved, User user, string ip)
 		{
 			if (targetUser == null)
 				throw new ArgumentNullException("targetUser");
-			_userRepository.UpdateIsApproved(targetUser, isApproved);
+			await _userRepository.UpdateIsApproved(targetUser, isApproved);
 			var logType = isApproved ? SecurityLogType.IsApproved : SecurityLogType.IsNotApproved;
-			_securityLogService.CreateLogEntry(user, targetUser, ip, String.Empty, logType);
+			await _securityLogService.CreateLogEntry(user, targetUser, ip, String.Empty, logType);
 		}
 
-		public void UpdateAuthorizationKey(User user, Guid key)
+		public async Task UpdateAuthorizationKey(User user, Guid key)
 		{
 			if (user == null)
 				throw new ArgumentNullException("user");
-			_userRepository.UpdateAuthorizationKey(user, key);
+			await _userRepository.UpdateAuthorizationKey(user, key);
 		}
 
-		public void Logout(User user, string ip)
+		public async Task Logout(User user, string ip)
 		{
 			// used only for logging; controller performs actual logout
-			_securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Logout);
+			await _securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Logout);
 		}
 
-		public bool Login(string email, string password, string ip, out User user)
+		public async Task<Tuple<bool, User>> Login(string email, string password, string ip)
 		{
-			Guid? salt;
-			var result = CheckPassword(email, password, out salt);
+			User user;
+			var (result, salt) = await CheckPassword(email, password);
 			if (result)
 			{
-				user = GetUserByEmail(email);
-				user.LastLoginDate = DateTime.UtcNow;
-				_userRepository.UpdateLastLoginDate(user, user.LastLoginDate);
-				_securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Login);
+				user = await GetUserByEmail(email);
+				await _userRepository.UpdateLastLoginDate(user, DateTime.UtcNow);
+				await _securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Login);
 				if (!salt.HasValue)
-					SetPassword(user, password, ip, user);
+					await SetPassword(user, password, ip, user);
 			}
 			else
 			{
 				user = null;
-				_securityLogService.CreateLogEntry((User)null, null, ip, "E-mail attempted: " + email, SecurityLogType.FailedLogin);
+				await _securityLogService.CreateLogEntry((User)null, null, ip, "E-mail attempted: " + email, SecurityLogType.FailedLogin);
 			}
-			return result;
+			return Tuple.Create(result, user);
 		}
 
-		public void Login(User user, string ip)
+		public async Task Login(User user, string ip)
 		{
-			user.LastLoginDate = DateTime.UtcNow;
-			_userRepository.UpdateLastLoginDate(user, user.LastLoginDate);
-			_securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Login);
+			await _userRepository.UpdateLastLoginDate(user, DateTime.UtcNow);
+			await _securityLogService.CreateLogEntry(null, user, ip, String.Empty, SecurityLogType.Login);
 		}
 
-		public List<string> GetAllRoles()
+		public async Task<List<string>> GetAllRoles()
 		{
-			return _roleRepository.GetAllRoles();
+			return await _roleRepository.GetAllRoles();
 		}
 
-		public void CreateRole(string role, User user, string ip)
+		public async Task CreateRole(string role, User user, string ip)
 		{
-			_roleRepository.CreateRole(role);
-			_securityLogService.CreateLogEntry(user, null, ip, "Role: " + role, SecurityLogType.RoleCreated);
+			await _roleRepository.CreateRole(role);
+			await _securityLogService.CreateLogEntry(user, null, ip, "Role: " + role, SecurityLogType.RoleCreated);
 		}
 
-		public void DeleteRole(string role, User user, string ip)
+		public async Task DeleteRole(string role, User user, string ip)
 		{
 			if (role.ToLower() == PermanentRoles.Admin.ToLower() || role.ToLower() == PermanentRoles.Moderator.ToLower())
 				throw new InvalidOperationException("Can't delete Admin or Moderator roles.");
-			_roleRepository.DeleteRole(role);
-			_securityLogService.CreateLogEntry(user, null, ip, "Role: " + role, SecurityLogType.RoleDeleted);
+			await _roleRepository.DeleteRole(role);
+			await _securityLogService.CreateLogEntry(user, null, ip, "Role: " + role, SecurityLogType.RoleDeleted);
 		}
 
-		public User VerifyAuthorizationCode(Guid key, string ip)
+		public async Task<User> VerifyAuthorizationCode(Guid key, string ip)
 		{
-			var targetUser = _userRepository.GetUserByAuthorizationKey(key);
+			var targetUser = await _userRepository.GetUserByAuthorizationKey(key);
 			if (targetUser == null)
 				return null;
 			var newKey = Guid.NewGuid();
-			UpdateAuthorizationKey(targetUser, newKey);
-			UpdateIsApproved(targetUser, true, null, ip);
+			await UpdateAuthorizationKey(targetUser, newKey);
+			await UpdateIsApproved(targetUser, true, null, ip);
 			targetUser.AuthorizationKey = newKey;
 			return targetUser;
 		}
 
-		public List<User> SearchByEmail(string email)
+		public async Task<List<User>> SearchByEmail(string email)
 		{
-			return _userRepository.SearchByEmail(email);
+			return await _userRepository.SearchByEmail(email);
 		}
 
-		public List<User> SearchByName(string name)
+		public async Task<List<User>> SearchByName(string name)
 		{
-			return _userRepository.SearchByName(name);
+			return await _userRepository.SearchByName(name);
 		}
 
-		public List<User> SearchByRole(string role)
+		public async Task<List<User>> SearchByRole(string role)
 		{
-			return _userRepository.SearchByRole(role);
+			return await _userRepository.SearchByRole(role);
 		}
 
-		public UserEdit GetUserEdit(User user)
+		public async Task<UserEdit> GetUserEdit(User user)
 		{
 			if (user == null)
 				throw new ArgumentNullException("user");
-			var profile = _profileRepository.GetProfile(user.UserID);
+			var profile = await _profileRepository.GetProfile(user.UserID);
 			return new UserEdit(user, profile);
 		}
 
-		public void EditUser(User targetUser, UserEdit userEdit, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile, string ip, User user)
+		public async Task EditUser(User targetUser, UserEdit userEdit, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile, string ip, User user)
 		{
-			if (!String.IsNullOrWhiteSpace(userEdit.NewEmail))
-				ChangeEmail(targetUser, userEdit.NewEmail, user, ip, userEdit.IsApproved);
-			if (!String.IsNullOrWhiteSpace(userEdit.NewPassword))
-				SetPassword(targetUser, userEdit.NewPassword, ip, user);
+			if (!string.IsNullOrWhiteSpace(userEdit.NewEmail))
+				await ChangeEmail(targetUser, userEdit.NewEmail, user, ip, userEdit.IsApproved);
+			if (!string.IsNullOrWhiteSpace(userEdit.NewPassword))
+				await SetPassword(targetUser, userEdit.NewPassword, ip, user);
 			if (targetUser.IsApproved != userEdit.IsApproved)
-				UpdateIsApproved(targetUser, userEdit.IsApproved, user, ip);
+				await UpdateIsApproved(targetUser, userEdit.IsApproved, user, ip);
 
-			var profile = _profileRepository.GetProfile(targetUser.UserID);
+			var profile = await _profileRepository.GetProfile(targetUser.UserID);
 			profile.IsSubscribed = userEdit.IsSubscribed;
 			profile.ShowDetails = userEdit.ShowDetails;
 			profile.IsPlainText = userEdit.IsPlainText;
@@ -381,72 +405,72 @@ namespace PopForums.Services
 				profile.AvatarID = null;
 			if (removePhoto)
 				profile.ImageID = null;
-			_profileRepository.Update(profile);
+			await _profileRepository.Update(profile);
 
 			var newRoles = userEdit.Roles ?? new string[0];
-			_roleRepository.ReplaceUserRoles(targetUser.UserID, newRoles);
+			await _roleRepository.ReplaceUserRoles(targetUser.UserID, newRoles);
 			foreach (var role in targetUser.Roles)
 				if (!newRoles.Contains(role))
-					_securityLogService.CreateLogEntry(user, targetUser, ip, role, SecurityLogType.UserRemovedFromRole);
+					await _securityLogService.CreateLogEntry(user, targetUser, ip, role, SecurityLogType.UserRemovedFromRole);
 			foreach (var role in newRoles)
 				if (!targetUser.Roles.Contains(role))
-					_securityLogService.CreateLogEntry(user, targetUser, ip, role, SecurityLogType.UserAddedToRole);
+					await _securityLogService.CreateLogEntry(user, targetUser, ip, role, SecurityLogType.UserAddedToRole);
 
 			if (avatarFile != null && avatarFile.Length > 0)
 			{
-				var avatarID = _userAvatarRepository.SaveNewAvatar(targetUser.UserID, avatarFile, DateTime.UtcNow);
+				var avatarID = await _userAvatarRepository.SaveNewAvatar(targetUser.UserID, avatarFile, DateTime.UtcNow);
 				profile.AvatarID = avatarID;
-				_profileRepository.Update(profile);
+				await _profileRepository.Update(profile);
 			}
 
 			if (photoFile != null && photoFile.Length > 0)
 			{
-				var imageID = _userImageRepository.SaveNewImage(targetUser.UserID, 0, true, photoFile, DateTime.UtcNow);
+				var imageID = await _userImageRepository.SaveNewImage(targetUser.UserID, 0, true, photoFile, DateTime.UtcNow);
 				profile.ImageID = imageID;
-				_profileRepository.Update(profile);
+				await _profileRepository.Update(profile);
 			}
 		}
 
-		public void EditUserProfileImages(User user, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile)
+		public async Task EditUserProfileImages(User user, bool removeAvatar, bool removePhoto, byte[] avatarFile, byte[] photoFile)
 		{
-			var profile = _profileRepository.GetProfile(user.UserID);
+			var profile = await _profileRepository.GetProfile(user.UserID);
 			if (removeAvatar)
 			{
-				_userAvatarRepository.DeleteAvatarsByUserID(user.UserID);
+				await _userAvatarRepository.DeleteAvatarsByUserID(user.UserID);
 				profile.AvatarID = null;
 			}
 			if (removePhoto)
 			{
-				_userImageRepository.DeleteImagesByUserID(user.UserID);
+				await _userImageRepository.DeleteImagesByUserID(user.UserID);
 				profile.ImageID = null;
 			}
-			_profileRepository.Update(profile);
+			await _profileRepository.Update(profile);
 
 			if (avatarFile != null && avatarFile.Length > 0)
 			{
-				_userAvatarRepository.DeleteAvatarsByUserID(user.UserID);
+				await _userAvatarRepository.DeleteAvatarsByUserID(user.UserID);
 				var bytes = _imageService.ConstrainResize(avatarFile, _settingsManager.Current.UserAvatarMaxWidth, _settingsManager.Current.UserAvatarMaxHeight, 70);
-				var avatarID = _userAvatarRepository.SaveNewAvatar(user.UserID, bytes, DateTime.UtcNow);
+				var avatarID = await _userAvatarRepository.SaveNewAvatar(user.UserID, bytes, DateTime.UtcNow);
 				profile.AvatarID = avatarID;
-				_profileRepository.Update(profile);
+				await _profileRepository.Update(profile);
 			}
 
 			if (photoFile != null && photoFile.Length > 0)
 			{
-				_userImageRepository.DeleteImagesByUserID(user.UserID);
+				await _userImageRepository.DeleteImagesByUserID(user.UserID);
 				var bytes = _imageService.ConstrainResize(photoFile, _settingsManager.Current.UserImageMaxWidth, _settingsManager.Current.UserImageMaxHeight, 70);
-				var imageID = _userImageRepository.SaveNewImage(user.UserID, 0, _settingsManager.Current.IsNewUserImageApproved, bytes, DateTime.UtcNow);
+				var imageID = await _userImageRepository.SaveNewImage(user.UserID, 0, _settingsManager.Current.IsNewUserImageApproved, bytes, DateTime.UtcNow);
 				profile.ImageID = imageID;
-				_profileRepository.Update(profile);
+				await _profileRepository.Update(profile);
 			}
 		}
 
 		// TODO: this and some other stuff probably belongs in ProfileService
-		public void EditUserProfile(User user, UserEditProfile userEditProfile)
+		public async Task EditUserProfile(User user, UserEditProfile userEditProfile)
 		{
-			var profile = _profileRepository.GetProfile(user.UserID);
+			var profile = await _profileRepository.GetProfile(user.UserID);
 			if (profile == null)
-				throw new Exception(String.Format("No profile found for UserID {0}", user.UserID));
+				throw new Exception($"No profile found for UserID {user.UserID}");
 			profile.IsSubscribed = userEditProfile.IsSubscribed;
 			profile.ShowDetails = userEditProfile.ShowDetails;
 			profile.IsPlainText = userEditProfile.IsPlainText;
@@ -460,19 +484,7 @@ namespace PopForums.Services
 			profile.Instagram = userEditProfile.Instagram;
 			profile.Facebook = userEditProfile.Facebook;
 			profile.Twitter = userEditProfile.Twitter;
-			_profileRepository.Update(profile);
-		}
-
-		public bool VerifyPassword(User user, string password)
-		{
-			Guid? salt;
-			string hashedPassword;
-			var savedHashedPassword = _userRepository.GetHashedPasswordByEmail(user.Email, out salt);
-			if (salt.HasValue)
-				hashedPassword = password.GetMD5Hash(salt.Value);
-			else
-				hashedPassword = password.GetMD5Hash();
-			return hashedPassword == savedHashedPassword;
+			await _profileRepository.Update(profile);
 		}
 
 		public bool IsPasswordValid(string password, out string errorMessage)
@@ -486,37 +498,37 @@ namespace PopForums.Services
 			return true;
 		}
 
-		public List<User> GetUsersOnline()
+		public async Task<List<User>> GetUsersOnline()
 		{
-			return _userRepository.GetUsersOnline();
+			return await _userRepository.GetUsersOnline();
 		}
 
-		public int GetTotalUsers()
+		public async Task<int> GetTotalUsers()
 		{
-			return _userRepository.GetTotalUsers();
+			return await _userRepository.GetTotalUsers();
 		}
 
-		public void GeneratePasswordResetEmail(User user, string resetLink)
+		public async Task GeneratePasswordResetEmail(User user, string resetLink)
 		{
 			if (user == null)
 				throw new ArgumentNullException("user");
 			var newAuth = Guid.NewGuid();
-			UpdateAuthorizationKey(user, newAuth);
+			await UpdateAuthorizationKey(user, newAuth);
 			user.AuthorizationKey = newAuth;
 			var link = resetLink + "/" + newAuth;
-			_forgotPasswordMailer.ComposeAndQueue(user, link);
+			await _forgotPasswordMailer.ComposeAndQueue(user, link);
 		}
 
-		public void ResetPassword(User user, string newPassword, string ip)
+		public async Task ResetPassword(User user, string newPassword, string ip)
 		{
-			SetPassword(user, newPassword, ip, null);
-			UpdateAuthorizationKey(user, Guid.NewGuid());
-			Login(user, ip);
+			await SetPassword(user, newPassword, ip, null);
+			await UpdateAuthorizationKey(user, Guid.NewGuid());
+			await Login(user, ip);
 		}
 
-		public List<User> GetSubscribedUsers()
+		public async Task<List<User>> GetSubscribedUsers()
 		{
-			return _userRepository.GetSubscribedUsers();
+			return await _userRepository.GetSubscribedUsers();
 		}
 
 		public Dictionary<User, int> GetUsersByPointTotals(int top)

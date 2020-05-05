@@ -4,8 +4,8 @@
 @{
 	ViewBag.Title = PopForums.Resources.RecentTopics;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
-	var user = UserRetrievalShim.GetUser(Context);
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var user = UserRetrievalShim.GetUser();
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent {
@@ -22,19 +22,14 @@
 
 <h1>@PopForums.Resources.Recent</h1>
 
-<div>
-	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><span class="glyphicon glyphicon-chevron-up"></span> <a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-	</ul>
-	<ul id="FixedBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><span class="glyphicon glyphicon-chevron-up"></span> <a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-		<li class="breadcrumb-item active">@PopForums.Resources.Recent</li>
-	</ul>
-</div>
+<ul id="TopBreadcrumb" class="breadcrumb sticky-top">
+	<li class="breadcrumb-item"><span class="glyphicon glyphicon-chevron-up"></span> <a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
+	<li class="breadcrumb-item active">@PopForums.Resources.Recent</li>
+</ul>
 
 <pf-pagerLinks controllerName="Forum" actionName="Recent" pagerContext="@Model.PagerContext" class="pagination pagination-sm pagerLinks" moreTextClass="morePager" currentTextClass="currentPager active" />
 
-<table id="TopicList" class="table grid table-hover">
+<table id="TopicList" class="table mt-3 table-hover">
 	@foreach (var topic in Model.Topics)
 	{
 		<tr @if (topic.IsDeleted) { <text> class="bg-warning" </text>  } data-topicid="@topic.TopicID">
@@ -49,8 +44,8 @@
 				}
 			</td>
 			<td>
-				<h2>@Html.ActionLink(topic.Title, "Topic", "Forum", new { id = topic.UrlName, page = 1 }, null)</h2>
-				<small class="float-right forumDetails">
+				<h2>@Html.ActionLink(topic.Title, "Topic", "Forum", new { id = topic.UrlName, pageNumber = 1 }, null)</h2>
+				<small class="float-right d-none d-sm-block">
 					@PopForums.Resources.StartedBy: @topic.StartedByName @PopForums.Resources.In @Model.ForumTitles[topic.ForumID] | @PopForums.Resources.Views: @topic.ViewCount | @PopForums.Resources.Replies: @topic.ReplyCount | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc="@topic.LastPostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(topic.LastPostTime, profile)</span> @PopForums.Resources.By @topic.LastPostName
 				</small>
 			</td>
@@ -58,11 +53,11 @@
 	}
 	<tr id="TopicTemplate" data-topicid="" class="hidden">
 		<td class="newIndicator">
-			<a href=""><span class="topicIndicator icon-file-text2 text-primary"></span></a>
+			<a href=""><span class="topicIndicator icon-file-text2 text-warning"></span></a>
 		</td>
 		<td>
 			<h2><a class="titleLink" href=""></a></h2>
-			<small class="float-right forumDetails">
+			<small class="float-right d-none d-sm-block">
 				@PopForums.Resources.StartedBy: <span class="startedByName"></span> @PopForums.Resources.In <span class="forumTitle"></span> | @PopForums.Resources.Views: <span class="viewCount"></span> | @PopForums.Resources.Replies: <span class="replyCount"></span> | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc=""></span> @PopForums.Resources.By <span class="lastPostName"></span>
 			</small>
 		</td>

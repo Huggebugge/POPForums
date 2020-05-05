@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using PopForums.Feeds;
 using PopForums.Models;
 using PopForums.Repositories;
@@ -8,8 +9,8 @@ namespace PopForums.ScoringGame
 {
 	public interface IEventPublisher
 	{
-		void ProcessEvent(string feedMessage, User user, string eventDefinitionID, bool overridePublishToActivityFeed);
-		void ProcessManualEvent(string feedMessage, User user, int pointValue);
+		Task ProcessEvent(string feedMessage, User user, string eventDefinitionID, bool overridePublishToActivityFeed);
+		Task ProcessManualEvent(string feedMessage, User user, int pointValue);
 	}
 
 	public class EventPublisher : IEventPublisher
@@ -29,29 +30,29 @@ namespace PopForums.ScoringGame
 		private readonly IAwardCalculator _awardCalculator;
 		private readonly IProfileService _profileService;
 
-		public void ProcessEvent(string feedMessage, User user, string eventDefinitionID, bool overridePublishToActivityFeed)
+		public async Task ProcessEvent(string feedMessage, User user, string eventDefinitionID, bool overridePublishToActivityFeed)
 		{
 			var timeStamp = DateTime.UtcNow;
-			var eventDefinition = _eventDefinitionService.GetEventDefinition(eventDefinitionID);
+			var eventDefinition = await _eventDefinitionService.GetEventDefinition(eventDefinitionID);
 			var ledgerEntry = new PointLedgerEntry { UserID = user.UserID, EventDefinitionID = eventDefinitionID, Points = eventDefinition.PointValue, TimeStamp = timeStamp };
-			_pointLedgerRepository.RecordEntry(ledgerEntry);
-			_profileService.UpdatePointTotal(user);
+			await _pointLedgerRepository.RecordEntry(ledgerEntry);
+			await _profileService.UpdatePointTotal(user);
 			if (eventDefinition.IsPublishedToFeed && !overridePublishToActivityFeed)
 			{
-				_feedService.PublishToFeed(user, feedMessage, eventDefinition.PointValue, timeStamp);
+				await _feedService.PublishToFeed(user, feedMessage, eventDefinition.PointValue, timeStamp);
 				_feedService.PublishToActivityFeed(feedMessage);
 			}
-			_awardCalculator.QueueCalculation(user, eventDefinition);
+			await _awardCalculator.QueueCalculation(user, eventDefinition);
 		}
 
-		public void ProcessManualEvent(string feedMessage, User user, int pointValue)
+		public async Task ProcessManualEvent(string feedMessage, User user, int pointValue)
 		{
 			var timeStamp = DateTime.UtcNow;
 			var eventDefinition = new EventDefinition { EventDefinitionID = "Manual", PointValue = pointValue };
 			var ledgerEntry = new PointLedgerEntry { UserID = user.UserID, EventDefinitionID = eventDefinition.EventDefinitionID, Points = eventDefinition.PointValue, TimeStamp = timeStamp };
-			_pointLedgerRepository.RecordEntry(ledgerEntry);
-			_profileService.UpdatePointTotal(user);
-			_feedService.PublishToFeed(user, feedMessage, eventDefinition.PointValue, timeStamp);
+			await _pointLedgerRepository.RecordEntry(ledgerEntry);
+			await _profileService.UpdatePointTotal(user);
+			await _feedService.PublishToFeed(user, feedMessage, eventDefinition.PointValue, timeStamp);
 		}
 	}
 }

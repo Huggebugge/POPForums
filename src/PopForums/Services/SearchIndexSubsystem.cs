@@ -7,9 +7,13 @@ namespace PopForums.Services
 {
 	public interface ISearchIndexSubsystem
 	{
-		void DoIndex(int topicID, string tenantID);
+		void DoIndex(int topicID, string tenantID, bool isForRemoval);
+		void RemoveIndex(int topicID, string tenantID);
 	}
 
+	/// <summary>
+	/// Implementation for in-database searching. Does not support multi-tenancy.
+	/// </summary>
 	public class SearchIndexSubsystem : ISearchIndexSubsystem
 	{
 		private readonly ISearchService _searchService;
@@ -23,18 +27,20 @@ namespace PopForums.Services
 			_topicService = topicService;
 		}
 
-		public void DoIndex(int topicID, string tenantID)
+		public void DoIndex(int topicID, string tenantID, bool isForRemoval)
 		{
-			var topic = _topicService.Get(topicID);
+			_searchService.DeleteAllIndexedWordsForTopic(topicID);
+			if (isForRemoval)
+				return;
+
+			var topic = _topicService.Get(topicID).Result;
 			if (topic == null)
 				return;
 			
-			_searchService.DeleteAllIndexedWordsForTopic(topic);
-
-			var junkList = _searchService.GetJunkWords();
+			var junkList = _searchService.GetJunkWords().Result;
 			var wordList = new List<SearchWord>();
 			var alphaNum = SearchService.SearchWordPattern;
-			var posts = _postService.GetPosts(topic, false);
+			var posts = _postService.GetPosts(topic, false).Result;
 
 			foreach (var post in posts)
 			{
@@ -68,6 +74,10 @@ namespace PopForums.Services
 			{
 				_searchService.SaveSearchWord(word);
 			}
+		}
+
+		public void RemoveIndex(int topicID, string tenantID)
+		{
 		}
 
 		private void TestForIndex(Topic topic, string testWord, int increment, int multiplier, bool cap, List<SearchWord> wordList, List<String> junkList)

@@ -1,19 +1,20 @@
 ﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using PopForums.Repositories;
 
 namespace PopForums.ScoringGame
 {
 	public interface IAwardDefinitionService
 	{
-		AwardDefinition Get(string awardDefinitionID);
-		List<AwardDefinition> GetByEventDefinitionID(string eventDefinitionID);
-		void Create(AwardDefinition awardDefinition);
-		void Delete(string awardDefinitionID);
-		List<AwardCondition> GetConditions(string awardDefinitionID);
-		void SaveConditions(AwardDefinition awardDefinition, List<AwardCondition> conditions);
-		List<AwardDefinition> GetAll();
-		void DeleteCondition(string awardDefinitionID, string eventDefinitionID);
-		void AddCondition(AwardCondition awardDefintion);
+		Task<AwardDefinition> Get(string awardDefinitionID);
+		Task<List<AwardDefinition>> GetByEventDefinitionID(string eventDefinitionID);
+		Task Create(AwardDefinition awardDefinition);
+		Task Delete(string awardDefinitionID);
+		Task<List<AwardCondition>> GetConditions(string awardDefinitionID);
+		Task SaveConditions(AwardDefinition awardDefinition, List<AwardCondition> conditions);
+		Task<List<AwardDefinition>> GetAll();
+		Task DeleteCondition(string awardDefinitionID, string eventDefinitionID);
+		Task AddCondition(AwardCondition awardDefintion);
 	}
 
 	public class AwardDefinitionService : IAwardDefinitionService
@@ -27,52 +28,52 @@ namespace PopForums.ScoringGame
 		private readonly IAwardDefinitionRepository _awardDefinitionRepository;
 		private readonly IAwardConditionRepository _awardConditionRepository;
 
-		public AwardDefinition Get(string awardDefinitionID)
+		public async Task<AwardDefinition> Get(string awardDefinitionID)
 		{
-			return _awardDefinitionRepository.Get(awardDefinitionID);
+			return await _awardDefinitionRepository.Get(awardDefinitionID);
 		}
 
-		public List<AwardDefinition> GetAll()
+		public async Task<List<AwardDefinition>> GetAll()
 		{
-			return _awardDefinitionRepository.GetAll();
+			return await _awardDefinitionRepository.GetAll();
 		}
 
-		public List<AwardDefinition> GetByEventDefinitionID(string eventDefinitionID)
+		public async Task<List<AwardDefinition>> GetByEventDefinitionID(string eventDefinitionID)
 		{
-			return _awardDefinitionRepository.GetByEventDefinitionID(eventDefinitionID);
+			return await _awardDefinitionRepository.GetByEventDefinitionID(eventDefinitionID);
 		}
 
-		public void Create(AwardDefinition awardDefinition)
+		public async Task Create(AwardDefinition awardDefinition)
 		{
-			_awardDefinitionRepository.Create(awardDefinition.AwardDefinitionID, awardDefinition.Title, awardDefinition.Description, awardDefinition.IsSingleTimeAward);
+			await _awardDefinitionRepository.Create(awardDefinition.AwardDefinitionID, awardDefinition.Title, awardDefinition.Description, awardDefinition.IsSingleTimeAward);
 		}
 
-		public void Delete(string awardDefinitionID)
+		public async Task Delete(string awardDefinitionID)
 		{
-			_awardDefinitionRepository.Delete(awardDefinitionID);
+			await _awardDefinitionRepository.Delete(awardDefinitionID);
 		}
 
-		public List<AwardCondition> GetConditions(string awardDefinitionID)
+		public async Task<List<AwardCondition>> GetConditions(string awardDefinitionID)
 		{
-			return _awardConditionRepository.GetConditions(awardDefinitionID);
+			return await _awardConditionRepository.GetConditions(awardDefinitionID);
 		}
 
-		public void SaveConditions(AwardDefinition awardDefinition, List<AwardCondition> conditions)
+		public async Task SaveConditions(AwardDefinition awardDefinition, List<AwardCondition> conditions)
 		{
-			_awardConditionRepository.DeleteConditions(awardDefinition.AwardDefinitionID);
+			await _awardConditionRepository.DeleteConditions(awardDefinition.AwardDefinitionID);
 			foreach (var condition in conditions)
 				condition.AwardDefinitionID = awardDefinition.AwardDefinitionID;
-			_awardConditionRepository.SaveConditions(conditions);
+			await _awardConditionRepository.SaveConditions(conditions);
 		}
 
-		public void DeleteCondition(string awardDefinitionID, string eventDefinitionID)
+		public async Task DeleteCondition(string awardDefinitionID, string eventDefinitionID)
 		{
-			_awardConditionRepository.DeleteCondition(awardDefinitionID, eventDefinitionID);
+			await _awardConditionRepository.DeleteCondition(awardDefinitionID, eventDefinitionID);
 		}
 
-		public void AddCondition(AwardCondition awardDefintion)
+		public async Task AddCondition(AwardCondition awardDefintion)
 		{
-			_awardConditionRepository.SaveConditions(new List<AwardCondition> {awardDefintion});
+			await _awardConditionRepository.SaveConditions(new List<AwardCondition> {awardDefintion});
 		}
 	}
 }

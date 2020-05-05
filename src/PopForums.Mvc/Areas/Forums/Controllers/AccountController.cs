@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using PopForums.Configuration;
@@ -11,6 +8,7 @@ using PopForums.Extensions;
 using PopForums.ExternalLogin;
 using PopForums.Feeds;
 using PopForums.Models;
+using PopForums.Mvc.Areas.Forums.Authorization;
 using PopForums.Mvc.Areas.Forums.Models;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.ScoringGame;
@@ -22,7 +20,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 	[Area("Forums")]
 	public class AccountController : Controller
 	{
-		public AccountController(IUserService userService, IProfileService profileService, INewAccountMailer newAccountMailer, ISettingsManager settingsManager, IPostService postService, ITopicService topicService, IForumService forumService, ILastReadService lastReadService, IClientSettingsMapper clientSettingsMapper, IUserEmailer userEmailer, IImageService imageService, IFeedService feedService, IUserAwardService userAwardService, IExternalUserAssociationManager externalUserAssociationManager, IUserRetrievalShim userRetrievalShim, IAuthenticationSchemeProvider authenticationSchemeProvider)
+		public AccountController(IUserService userService, IProfileService profileService, INewAccountMailer newAccountMailer, ISettingsManager settingsManager, IPostService postService, ITopicService topicService, IForumService forumService, ILastReadService lastReadService, IClientSettingsMapper clientSettingsMapper, IUserEmailer userEmailer, IImageService imageService, IFeedService feedService, IUserAwardService userAwardService, IExternalUserAssociationManager externalUserAssociationManager, IUserRetrievalShim userRetrievalShim, IExternalLoginRoutingService externalLoginRoutingService, IExternalLoginTempService externalLoginTempService, IConfig config, IReCaptchaService reCaptchaService)
 		{
 			_userService = userService;
 			_settingsManager = settingsManager;
@@ -39,7 +37,10 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			_userAwardService = userAwardService;
 			_externalUserAssociationManager = externalUserAssociationManager;
 			_userRetrievalShim = userRetrievalShim;
-			_authenticationSchemeProvider = authenticationSchemeProvider;
+			_externalLoginRoutingService = externalLoginRoutingService;
+			_externalLoginTempService = externalLoginTempService;
+			_config = config;
+			_reCaptchaService = reCaptchaService;
 		}
 
 		public static string Name = "Account";
@@ -62,8 +63,12 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly IUserAwardService _userAwardService;
 		private readonly IExternalUserAssociationManager _externalUserAssociationManager;
 		private readonly IUserRetrievalShim _userRetrievalShim;
-		private readonly IAuthenticationSchemeProvider _authenticationSchemeProvider;
+		private readonly IExternalLoginRoutingService _externalLoginRoutingService;
+		private readonly IExternalLoginTempService _externalLoginTempService;
+		private readonly IConfig _config;
+		private readonly IReCaptchaService _reCaptchaService;
 
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Create()
 		{
 			SetupCreateData();
@@ -73,6 +78,12 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				IsSubscribed = true,
 				TimeZone = _settingsManager.Current.ServerTimeZone
 			};
+			var loginState = _externalLoginTempService.Read();
+			if (loginState != null)
+			{
+				signupData.Email = loginState.ResultData.Email;
+				signupData.Name = loginState.ResultData.Name;
+			}
 			return View(signupData);
 		}
 
@@ -82,16 +93,23 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			ViewData[TosKey] = _settingsManager.Current.TermsOfService;
 			ViewData[ServerTimeZoneKey] = _settingsManager.Current.ServerTimeZone;
 		}
-		
+
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
 		public async Task<ViewResult> Create(SignupData signupData)
 		{
 			var ip = HttpContext.Connection.RemoteIpAddress.ToString();
-			ValidateSignupData(signupData, ModelState, ip);
+			if (_config.UseReCaptcha)
+			{
+				var reCaptchaResponse = await _reCaptchaService.VerifyToken(signupData.Token, ip);
+				if (!reCaptchaResponse.IsSuccess)
+					ModelState.AddModelError("Email", Resources.BotError);
+			}
+			await ValidateSignupData(signupData, ModelState, ip);
 			if (ModelState.IsValid)
 			{
-				var user = _userService.CreateUser(signupData, ip);
-				_profileService.Create(user, signupData);
+				var user = await _userService.CreateUser(signupData, ip);
+				await _profileService.Create(user, signupData);
 				// TODO: get rid of FullUrlHelper extension
 				var verifyUrl = this.FullUrlHelper("Verify", "Account");
 				var result = _newAccountMailer.Send(user, verifyUrl);
@@ -100,16 +118,20 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				if (_settingsManager.Current.IsNewUserApproved)
 				{
 					ViewData["Result"] = Resources.AccountReady;
-					_userService.Login(user, ip);
+					await _userService.Login(user, ip);
 				}
 				else
 					ViewData["Result"] = Resources.AccountReadyCheckEmail;
-				
-				var authResult = await AuthorizationController.GetExternalLoginInfoAsync(HttpContext);
-				if (authResult != null)
-					_externalUserAssociationManager.Associate(user, authResult, ip);
 
-				await AuthorizationController.PerformSignInAsync(user, HttpContext);
+				var loginState = _externalLoginTempService.Read();
+				if (loginState != null)
+				{
+					var externalLoginInfo = new ExternalLoginInfo(loginState.ProviderType.ToString(), loginState.ResultData.ID, loginState.ResultData.Name);
+					await _externalUserAssociationManager.Associate(user, externalLoginInfo, ip);
+					_externalLoginTempService.Remove();
+				}
+
+				await IdentityController.PerformSignInAsync(user, HttpContext);
 
 				return View("AccountCreated");
 			}
@@ -117,59 +139,61 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View(signupData);
 		}
 
-		private void ValidateSignupData(SignupData signupData, ModelStateDictionary modelState, string ip)
+		private async Task ValidateSignupData(SignupData signupData, ModelStateDictionary modelState, string ip)
 		{
 			if (!signupData.IsCoppa)
 				modelState.AddModelError("IsCoppa", Resources.MustBe13);
 			if (!signupData.IsTos)
 				modelState.AddModelError("IsTos", Resources.MustAcceptTOS);
-			string passwordError;
-			var passwordValid = _userService.IsPasswordValid(signupData.Password, out passwordError);
+			var passwordValid = _userService.IsPasswordValid(signupData.Password, out var passwordError);
 			if (!passwordValid)
 				modelState.AddModelError("Password", passwordError);
 			if (signupData.Password != signupData.PasswordRetype)
 				modelState.AddModelError("PasswordRetype", Resources.RetypeYourPassword);
-			if (String.IsNullOrWhiteSpace(signupData.Name))
+			if (string.IsNullOrWhiteSpace(signupData.Name))
 				modelState.AddModelError("Name", Resources.NameRequired);
-			else if (_userService.IsNameInUse(signupData.Name))
+			else if (await _userService.IsNameInUse(signupData.Name))
 				modelState.AddModelError("Name", Resources.NameInUse);
-			if (String.IsNullOrWhiteSpace(signupData.Email))
+			if (string.IsNullOrWhiteSpace(signupData.Email))
 				modelState.AddModelError("Email", Resources.EmailRequired);
 			else
 				if (!signupData.Email.IsEmailAddress())
-				modelState.AddModelError("Email", Resources.ValidEmailAddressRequired);
-			else if (signupData.Email != null && _userService.IsEmailInUse(signupData.Email))
+					modelState.AddModelError("Email", Resources.ValidEmailAddressRequired);
+			else if (signupData.Email != null && await _userService.IsEmailInUse(signupData.Email))
 				modelState.AddModelError("Email", Resources.EmailInUse);
-			if (signupData.Email != null && _userService.IsEmailBanned(signupData.Email))
+			if (signupData.Email != null && await _userService.IsEmailBanned(signupData.Email))
 				modelState.AddModelError("Email", Resources.EmailBanned);
-			if (_userService.IsIPBanned(ip))
+			if (await _userService.IsIPBanned(ip))
 				modelState.AddModelError("Email", Resources.IPBanned);
 		}
 
-		public ViewResult Verify(string id)
+		[PopForumsAuthorizationIgnore]
+		public async Task<ViewResult> Verify(string id)
 		{
 			var authKey = Guid.Empty;
-			if (!String.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
+			if (!string.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
 				return View("VerifyFail");
-			if (String.IsNullOrWhiteSpace(id))
+			if (string.IsNullOrWhiteSpace(id))
 				return View();
-			var user = _userService.VerifyAuthorizationCode(authKey, HttpContext.Connection.RemoteIpAddress.ToString());
+			var user = await _userService.VerifyAuthorizationCode(authKey, HttpContext.Connection.RemoteIpAddress.ToString());
 			if (user == null)
 				return View("VerifyFail");
 			ViewData["Result"] = Resources.AccountVerified;
-			_userService.Login(user, HttpContext.Connection.RemoteIpAddress.ToString());
+			await _userService.Login(user, HttpContext.Connection.RemoteIpAddress.ToString());
 			return View();
 		}
 
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
 		public RedirectToActionResult VerifyCode(string authorizationCode)
 		{
 			return RedirectToAction("Verify", new { id = authorizationCode });
 		}
 
-		public ViewResult RequestCode(string email)
+		[PopForumsAuthorizationIgnore]
+		public async Task<ViewResult> RequestCode(string email)
 		{
-			var user = _userService.GetUserByEmail(email);
+			var user = await _userService.GetUserByEmail(email);
 			if (user == null)
 			{
 				ViewData["Result"] = Resources.NoUserFoundWithEmail;
@@ -184,15 +208,17 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View("Verify", new { id = String.Empty });
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Forgot()
 		{
 			return View();
 		}
 
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
-		public ViewResult Forgot(string email)
+		public async Task<ViewResult> Forgot(string email)
 		{
-			var user = _userService.GetUserByEmail(email);
+			var user = await _userService.GetUserByEmail(email);
 			if (user == null)
 			{
 				ViewBag.Result = Resources.EmailNotFound;
@@ -201,17 +227,18 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			{
 				ViewBag.Result = Resources.ForgotInstructionsSent;
 				var resetLink = this.FullUrlHelper("ResetPassword", "Account");
-				_userService.GeneratePasswordResetEmail(user, resetLink);
+				await _userService.GeneratePasswordResetEmail(user, resetLink);
 			}
 			return View();
 		}
 
-		public ActionResult ResetPassword(string id)
+		[PopForumsAuthorizationIgnore]
+		public async Task<ActionResult> ResetPassword(string id)
 		{
 			var authKey = Guid.Empty;
-			if (!String.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
+			if (!string.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
 				return StatusCode(403);
-			var user = _userService.GetUserByAuhtorizationKey(authKey);
+			var user = await _userService.GetUserByAuhtorizationKey(authKey);
 			var container = new PasswordResetContainer();
 			if (user == null)
 				container.IsValidUser = false;
@@ -220,58 +247,60 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View(container);
 		}
 
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
-		public ActionResult ResetPassword(string id, PasswordResetContainer resetContainer)
+		public async Task<ActionResult> ResetPassword(string id, PasswordResetContainer resetContainer)
 		{
 			var authKey = Guid.Empty;
-			if (!String.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
+			if (!string.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
 				return StatusCode(403);
-			var user = _userService.GetUserByAuhtorizationKey(authKey);
+			var user = await _userService.GetUserByAuhtorizationKey(authKey);
 			resetContainer.IsValidUser = true;
 			if (resetContainer.Password != resetContainer.PasswordRetype)
 				ModelState.AddModelError("PasswordRetype", Resources.RetypePasswordMustMatch);
 			string errorMessage;
 			_userService.IsPasswordValid(resetContainer.Password, out errorMessage);
-			if (!String.IsNullOrWhiteSpace(errorMessage))
+			if (!string.IsNullOrWhiteSpace(errorMessage))
 				ModelState.AddModelError("Password", errorMessage);
 			if (!ModelState.IsValid)
 				return View(resetContainer);
-			_userService.ResetPassword(user, resetContainer.Password, HttpContext.Connection.RemoteIpAddress.ToString());
+			await _userService.ResetPassword(user, resetContainer.Password, HttpContext.Connection.RemoteIpAddress.ToString());
 			return RedirectToAction("ResetPasswordSuccess");
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public ActionResult ResetPasswordSuccess()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return RedirectToAction("Login");
 			return View();
 		}
 
-		public ViewResult EditProfile()
+		public async Task<ViewResult> EditProfile()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			var profile = _profileService.GetProfileForEdit(user);
+			var profile = await _profileService.GetProfileForEdit(user);
 			var userEdit = new UserEditProfile(profile);
 			return View(userEdit);
 		}
 
 		[HttpPost]
-		public ViewResult EditProfile(UserEditProfile userEdit)
+		public async Task<ViewResult> EditProfile(UserEditProfile userEdit)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			_userService.EditUserProfile(user, userEdit);
+			await _userService.EditUserProfile(user, userEdit);
 			ViewBag.Result = Resources.ProfileUpdated;
 			return View(userEdit);
 		}
 
 		public ViewResult Security()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
 			var isNewUserApproved = _settingsManager.Current.IsNewUserApproved;
@@ -280,41 +309,41 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		}
 
 		[HttpPost]
-		public ViewResult ChangePassword(UserEditSecurity userEdit)
+		public async Task<ViewResult> ChangePassword(UserEditSecurity userEdit)
 		{
-			string errorMessage;
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			if (!_userService.VerifyPassword(user, userEdit.OldPassword))
+			var (isPasswordPassed, _) = await _userService.CheckPassword(user.Email, userEdit.OldPassword);
+			if (!isPasswordPassed)
 				ViewBag.PasswordResult = Resources.OldPasswordIncorrect;
 			else if (!userEdit.NewPasswordsMatch())
 				ViewBag.PasswordResult = Resources.RetypePasswordMustMatch;
-			else if (!_userService.IsPasswordValid(userEdit.NewPassword, out errorMessage))
+			else if (!_userService.IsPasswordValid(userEdit.NewPassword, out var errorMessage))
 				ViewBag.PasswordResult = errorMessage;
 			else
 			{
-				_userService.SetPassword(user, userEdit.NewPassword, HttpContext.Connection.RemoteIpAddress.ToString(), user);
+				await _userService.SetPassword(user, userEdit.NewPassword, HttpContext.Connection.RemoteIpAddress.ToString(), user);
 				ViewBag.PasswordResult = Resources.NewPasswordSaved;
 			}
 			return View("Security", new UserEditSecurity { NewEmail = String.Empty, NewEmailRetype = String.Empty, IsNewUserApproved = _settingsManager.Current.IsNewUserApproved });
 		}
 
 		[HttpPost]
-		public ViewResult ChangeEmail(UserEditSecurity userEdit)
+		public async Task<ViewResult> ChangeEmail(UserEditSecurity userEdit)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			if (String.IsNullOrWhiteSpace(userEdit.NewEmail) || !userEdit.NewEmail.IsEmailAddress())
+			if (string.IsNullOrWhiteSpace(userEdit.NewEmail) || !userEdit.NewEmail.IsEmailAddress())
 				ViewBag.EmailResult = Resources.ValidEmailAddressRequired;
 			else if (userEdit.NewEmail != userEdit.NewEmailRetype)
 				ViewBag.EmailResult = Resources.EmailsMustMatch;
-			else if (_userService.IsEmailInUseByDifferentUser(user, userEdit.NewEmail))
+			else if (await _userService.IsEmailInUseByDifferentUser(user, userEdit.NewEmail))
 				ViewBag.EmailResult = Resources.EmailInUse;
 			else
 			{
-				_userService.ChangeEmail(user, userEdit.NewEmail, user, HttpContext.Connection.RemoteIpAddress.ToString());
+				await _userService.ChangeEmail(user, userEdit.NewEmail, user, HttpContext.Connection.RemoteIpAddress.ToString());
 				if (_settingsManager.Current.IsNewUserApproved)
 					ViewBag.EmailResult = Resources.EmailChangeSuccess;
 				else
@@ -329,22 +358,22 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View("Security", new UserEditSecurity { NewEmail = String.Empty, NewEmailRetype = String.Empty, IsNewUserApproved = _settingsManager.Current.IsNewUserApproved });
 		}
 
-		public ViewResult ManagePhotos()
+		public async Task<ViewResult> ManagePhotos()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			var userEdit = new UserEditPhoto(profile);
 			if (profile.ImageID.HasValue)
-				userEdit.IsImageApproved = _imageService.IsUserImageApproved(profile.ImageID.Value);
+				userEdit.IsImageApproved = await _imageService.IsUserImageApproved(profile.ImageID.Value);
 			return View(userEdit);
 		}
 		
 		[HttpPost]
-		public ActionResult ManagePhotos(UserEditPhoto userEdit)
+		public async Task<ActionResult> ManagePhotos(UserEditPhoto userEdit)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
 			byte[] avatarFile = null;
@@ -353,73 +382,73 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			byte[] photoFile = null;
 			if (userEdit.PhotoFile != null)
 				photoFile = userEdit.PhotoFile.OpenReadStream().ToBytes();
-			_userService.EditUserProfileImages(user, userEdit.DeleteAvatar, userEdit.DeleteImage, avatarFile, photoFile);
+			await _userService.EditUserProfileImages(user, userEdit.DeleteAvatar, userEdit.DeleteImage, avatarFile, photoFile);
 			return RedirectToAction("ManagePhotos");
 		}
 
-		public ViewResult MiniProfile(int id)
+		public async Task<ViewResult> MiniProfile(int id)
 		{
-			var user = _userService.GetUser(id);
+			var user = await _userService.GetUser(id);
 			if (user == null)
 				return View("MiniUserNotFound");
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			UserImage userImage = null;
 			if (profile.ImageID.HasValue)
-				userImage = _imageService.GetUserImage(profile.ImageID.Value);
+				userImage = await _imageService.GetUserImage(profile.ImageID.Value);
 			var model = new DisplayProfile(user, profile, userImage);
-			model.PostCount = _postService.GetPostCount(user);
-			var viewingUser = _userRetrievalShim.GetUser(HttpContext);
+			model.PostCount = await _postService.GetPostCount(user);
+			var viewingUser = _userRetrievalShim.GetUser();
 			if (viewingUser == null)
 				model.ShowDetails = false;
 			return View(model);
 		}
 
-		public ActionResult ViewProfile(int id)
+		public async Task<ActionResult> ViewProfile(int id)
 		{
-			var user = _userService.GetUser(id);
+			var user = await _userService.GetUser(id);
 			if (user == null)
 				return NotFound();
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			UserImage userImage = null;
 			if (profile.ImageID.HasValue)
-				userImage = _imageService.GetUserImage(profile.ImageID.Value);
+				userImage = await _imageService.GetUserImage(profile.ImageID.Value);
 			var model = new DisplayProfile(user, profile, userImage);
-			model.PostCount = _postService.GetPostCount(user);
-			model.Feed = _feedService.GetFeed(user);
-			model.UserAwards = _userAwardService.GetAwards(user);
-			var viewingUser = _userRetrievalShim.GetUser(HttpContext);
+			model.PostCount = await _postService.GetPostCount(user);
+			model.Feed = await _feedService.GetFeed(user);
+			model.UserAwards = await _userAwardService.GetAwards(user);
+			var viewingUser = _userRetrievalShim.GetUser();
 			if (viewingUser == null)
 				model.ShowDetails = false;
 			return View(model);
 		}
 
-		public ActionResult Posts(int id, int page = 1)
+		public async Task<ActionResult> Posts(int id, int pageNumber = 1)
 		{
-			var postUser = _userService.GetUser(id);
+			var postUser = await _userService.GetUser(id);
 			if (postUser == null)
 				return NotFound();
 			var includeDeleted = false;
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user != null && user.IsInRole(PermanentRoles.Moderator))
 				includeDeleted = true;
 			var titles = _forumService.GetAllForumTitles();
-			PagerContext pagerContext;
-			var topics = _topicService.GetTopics(user, postUser, includeDeleted, page, out pagerContext);
+			var (topics, pagerContext) = await _topicService.GetTopics(user, postUser, includeDeleted, pageNumber);
 			var container = new PagedTopicContainer { ForumTitles = titles, PagerContext = pagerContext, Topics = topics };
-			_lastReadService.GetTopicReadStatus(user, container);
+			await _lastReadService.GetTopicReadStatus(user, container);
 			ViewBag.PostUserName = postUser.Name;
 			return View(container);
 		}
 
-		public JsonResult ClientSettings()
+		public async Task<JsonResult> ClientSettings()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return Json(_clientSettingsMapper.GetDefault());
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			return Json(_clientSettingsMapper.GetClientSettings(profile));
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Login()
 		{
 			string link;
@@ -433,77 +462,71 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			}
 			ViewBag.Referrer = link;
 
-			var externalLoginList = GetExternalLoginList();
+			var externalLoginList = _externalLoginRoutingService.GetActiveProviderTypeAndNameDictionary();
 
 			return View(externalLoginList);
 		}
 
-		private List<AuthenticationScheme> GetExternalLoginList()
+		public async Task<ActionResult> EmailUser(int id)
 		{
-			var schemes = _authenticationSchemeProvider.GetAllSchemesAsync().Result
-				.Where(x => !string.IsNullOrWhiteSpace(x.DisplayName)).ToList();
-			return schemes;
-		}
-
-		public ActionResult EmailUser(int id)
-		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return StatusCode(403);
-			var toUser = _userService.GetUser(id);
+			var toUser = await _userService.GetUser(id);
 			if (toUser == null)
 				return NotFound();
-			if (!_userEmailer.IsUserEmailable(toUser))
+			if (await _userEmailer.IsUserEmailable(toUser) == false)
 				return StatusCode(403);
 			ViewBag.IP = HttpContext.Connection.RemoteIpAddress.ToString();
 			return View(toUser);
 		}
 
 		[HttpPost]
-		public ActionResult EmailUser(int id, string subject, string text)
+		public async Task<ActionResult> EmailUser(int id, string subject, string text)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return StatusCode(403);
-			var toUser = _userService.GetUser(id);
+			var toUser = await _userService.GetUser(id);
 			if (toUser == null)
 				return NotFound();
-			if (!_userEmailer.IsUserEmailable(toUser))
+			if (await _userEmailer.IsUserEmailable(toUser) == false)
 				return StatusCode(403);
-			if (String.IsNullOrWhiteSpace(subject) || String.IsNullOrWhiteSpace(text))
+			if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(text))
 			{
 				ViewBag.EmailResult = Resources.PMCreateWarnings;
 				ViewBag.IP = HttpContext.Connection.RemoteIpAddress.ToString();
 				return View(toUser);
 			}
-			_userEmailer.ComposeAndQueue(toUser, user, HttpContext.Connection.RemoteIpAddress.ToString(), subject, text);
+			await _userEmailer.ComposeAndQueue(toUser, user, HttpContext.Connection.RemoteIpAddress.ToString(), subject, text);
 			return View("EmailSent");
 		}
 
-		public ViewResult Unsubscribe(int id, string key)
+		[PopForumsAuthorizationIgnore]
+		public async Task<ViewResult> Unsubscribe(int id, string key)
 		{
-			var user = _userService.GetUser(id);
-			if (user == null || !_profileService.Unsubscribe(user, key))
+			var user = await _userService.GetUser(id);
+			if (user == null || (await _profileService.Unsubscribe(user, key) == false))
 				return View("UnsubscribeFailure");
 			return View();
 		}
 
-		public ViewResult ExternalLogins()
+		public async Task<ViewResult> ExternalLogins()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			var externalAssociations = _externalUserAssociationManager.GetExternalUserAssociations(user);
+			var externalAssociations = await _externalUserAssociationManager.GetExternalUserAssociations(user);
 			ViewBag.Referrer = Url.Action("ExternalLogins");
 			return View(externalAssociations);
 		}
 
-		public ActionResult RemoveExternalLogin(int id)
+		public async Task<ActionResult> RemoveExternalLogin(int id)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View("EditAccountNoUser");
-			_externalUserAssociationManager.RemoveAssociation(user, id, HttpContext.Connection.RemoteIpAddress.ToString());
+			await _externalUserAssociationManager.RemoveAssociation(user, id, HttpContext.Connection.RemoteIpAddress.ToString());
 			return RedirectToAction("ExternalLogins");
 		}
 	}

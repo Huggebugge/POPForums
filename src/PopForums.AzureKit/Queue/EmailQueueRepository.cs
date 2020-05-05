@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Queue;
+using Microsoft.Azure.Storage;
+using Microsoft.Azure.Storage.Queue;
 using Newtonsoft.Json;
 using PopForums.Configuration;
 using PopForums.Email;
@@ -18,15 +18,15 @@ namespace PopForums.AzureKit.Queue
 			_config = config;
 		}
 
-		public void Enqueue(EmailQueuePayload payload)
+		public async Task Enqueue(EmailQueuePayload payload)
 		{
 			var serializedPayload = JsonConvert.SerializeObject(payload);
 			var message = new CloudQueueMessage(serializedPayload);
-			var queue = GetQueue().Result;
-			queue.AddMessageAsync(message);
+			var queue = await GetQueue();
+			await queue.AddMessageAsync(message);
 		}
 
-		public EmailQueuePayload Dequeue()
+		public Task<EmailQueuePayload> Dequeue()
 		{
 			throw new System.NotImplementedException($"{nameof(Dequeue)} should never be called because it's automatically bound to an Azure function.");
 		}

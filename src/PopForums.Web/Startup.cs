@@ -1,30 +1,23 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;
 using PopForums.AwsKit;
 using PopForums.AzureKit;
 using PopForums.Configuration;
-using PopForums.Sql;
 using PopForums.Extensions;
-using PopForums.ExternalLogin;
-using PopForums.Mvc.Areas.Forums.Extensions;
 using PopForums.Mvc.Areas.Forums.Authorization;
-using PopForums.Services;
+using PopForums.Mvc.Areas.Forums.Extensions;
+using PopForums.Sql;
 
 namespace PopForums.Web
 {
 	public class Startup
 	{
-		public Startup(IHostingEnvironment env)
+		public Startup(IWebHostEnvironment env)
 		{
 			// Setup configuration sources.
 			var builder = new ConfigurationBuilder()
@@ -38,12 +31,9 @@ namespace PopForums.Web
 		}
 
 		public IConfigurationRoot Configuration { get; set; }
-		
+
 		public void ConfigureServices(IServiceCollection services)
 		{
-			// needed for social logins in POP Forums
-			services.AddAuthentication(options => options.DefaultSignInScheme = PopForumsAuthorizationDefaults.AuthenticationScheme);
-
 			services.Configure<AuthorizationOptions>(options =>
 			{
 				// sets claims policies for admin and moderator functions in POP Forums
@@ -54,12 +44,14 @@ namespace PopForums.Web
 			{
 				// identifies users on POP Forums actions
 				options.Filters.Add(typeof(PopForumsUserAttribute));
-			});
+			}).SetCompatibilityVersion(CompatibilityVersion.Version_3_0);
 
-			// sets up the dependencies for the base, SQL and web libraries in POP Forums
-			services.AddPopForumsBase();
+			// It's unfortunately necessary to use the Json.NET serializer for API requests because System.Text.Json doesn't handler enums correctly
+			services.AddControllers().AddNewtonsoftJson();
+
+			// set up the dependencies for the SQL library in POP Forums
 			services.AddPopForumsSql();
-			// this adds dependencies from the MVC project and sets up authentication for the forum
+			// this adds dependencies from the MVC project (and base dependencies) and sets up authentication for the forum
 			services.AddPopForumsMvc();
 
 			// use Redis cache for POP Forums using AzureKit
@@ -85,50 +77,46 @@ namespace PopForums.Web
 			// but don't use if you're running these in functions
 			//services.AddPopForumsBackgroundServices();
 		}
-		
-		public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+
+		public void Configure(IApplicationBuilder app, ILoggerFactory loggerFactory)
 		{
 			// Records exceptions and info to the POP Forums database.
 			loggerFactory.AddPopForumsLogger(app);
 
+			// Enables languages
+			app.UsePopForumsCultures();
+
 			app.UseStaticFiles();
 
-			// Not unique to POP Forums, but required.
+			// Not unique to POP Forums, but required. Call before UsePopForumsAuth().
 			app.UseAuthentication();
 
 			// Populate the POP Forums identity in every request.
 			app.UsePopForumsAuth();
 
-			// Wires up the SignalR hubs for real-time updates.
-			app.UsePopForumsSignalR();
-
 			app.UseDeveloperExceptionPage();
 
-			// Add MVC to the request pipeline.
-			app.UseMvc(routes =>
+			// Add MVC to the request pipeline. The order of the next three lines matters:
+			app.UseRouting();
+			app.UseAuthorization();
+			app.UseEndpoints(endpoints =>
 			{
 				// POP Forums routes
-				routes.AddPopForumsRoutes(app);
+				endpoints.AddPopForumsEndpoints(app);
+
+				// need this if you have lots of routing and/or areas
+				endpoints.MapAreaControllerRoute(
+					"forumroutes", "forums",
+					"Forums/{controller=Home}/{action=Index}/{id?}");
 
 				// app routes
-
-				routes.MapRoute(
-					name: "areaRoute",
-					template: "{area:exists}/{controller=Home}/{action=Index}/{id?}");
-				routes.MapRoute(
-					name: "default",
-					template: "{controller=Home}/{action=Index}/{id?}");
+				endpoints.MapControllerRoute(
+					"areaRoute",
+					"{area:exists}/{controller=Home}/{action=Index}/{id?}");
+				endpoints.MapControllerRoute(
+					"default",
+					"{controller=Home}/{action=Index}/{id?}");
 			});
-
-			// TODO: abstract this
-			var supportedCultures = new List<CultureInfo> { new CultureInfo("en"), new CultureInfo("de"), new CultureInfo("es"), new CultureInfo("nl"), new CultureInfo("uk"), new CultureInfo("zh-TW") };
-            app.UseRequestLocalization(new RequestLocalizationOptions {
-                DefaultRequestCulture = new RequestCulture("en", "en"),
-                SupportedCultures = supportedCultures,
-                SupportedUICultures = supportedCultures
-            });
-			//CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("es");
-			//CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("es");
 		}
 	}
 }

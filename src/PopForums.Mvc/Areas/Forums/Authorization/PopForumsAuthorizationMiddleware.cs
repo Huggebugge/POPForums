@@ -23,13 +23,13 @@ namespace PopForums.Mvc.Areas.Forums.Authorization
 			var identity = authResult?.Principal?.Identity as ClaimsIdentity;
 			if (identity != null)
 			{
-				var user = userService.GetUserByName(identity.Name);
+				var user = userService.GetUserByName(identity.Name).Result;
 				if (user != null)
 				{
 					foreach (var role in user.Roles)
 						identity.AddClaim(new Claim(PopForumsAuthorizationDefaults.ForumsClaimType, role));
 					context.Items["PopForumsUser"] = user;
-					var profile = profileService.GetProfile(user);
+					var profile = profileService.GetProfile(user).Result;
 					context.Items["PopForumsProfile"] = profile;
 					context.User = new ClaimsPrincipal(identity);
 				}

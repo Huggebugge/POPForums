@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
 using PopForums.Repositories;
 
 namespace PopForums.Configuration
@@ -9,10 +8,7 @@ namespace PopForums.Configuration
 	{
 		Settings Current { get; }
 		void SaveCurrent();
-		void FlushCurrent();
 		void Save(Settings settings);
-		void SaveCurrent(Dictionary<string, object> dictionary);
-		bool IsLoaded();
 	}
 
 	public class SettingsManager : ISettingsManager
@@ -25,9 +21,9 @@ namespace PopForums.Configuration
 
 		private readonly ISettingsRepository _settingsRepository;
 		private readonly IErrorLog _errorLog;
-		private static Settings _settings;
 		private static DateTime _lastLoad;
 		private static readonly object SyncRoot = new object();
+		private Settings _settings;
 
 		public Settings Current
 		{
@@ -39,11 +35,6 @@ namespace PopForums.Configuration
 			}
 		}
 
-		public bool IsLoaded()
-		{
-			return _settings != null;
-		}
-
 		private void LoadSettings()
 		{
 			var dictionary = _settingsRepository.Get();
@@ -53,7 +44,7 @@ namespace PopForums.Configuration
 				var property = settings.GetType().GetProperty(setting);
 				if (property == null)
 				{
-					_errorLog.Log(null, ErrorSeverity.Warning, String.Format("Settings repository returned a setting called {0}, which does not exist in code.", setting));
+					_errorLog.Log(null, ErrorSeverity.Warning, $"Settings repository returned a setting called {setting}, which does not exist in code.");
 				}
 				else
 				{
@@ -75,7 +66,7 @@ namespace PopForums.Configuration
 							property.SetValue(settings, Convert.ToDateTime(dictionary[setting]), null);
 							break;
 						default:
-							throw new Exception(String.Format("Settings loader not coded to convert values of type {0}.", property.PropertyType.FullName));
+							throw new Exception($"Settings loader not coded to convert values of type {property.PropertyType.FullName}.");
 					}
 				}
 			}
@@ -86,41 +77,6 @@ namespace PopForums.Configuration
 		public void Save(Settings settings)
 		{
 			_settings = settings;
-			SaveCurrent();
-		}
-
-		public void SaveCurrent(Dictionary<string, object> dictionary)
-		{
-			LoadSettings();
-			foreach (var item in dictionary)
-			{
-				var property = _settings.GetType().GetProperty(item.Key);
-				if (property == null)
-					continue;
-					//throw new Exception(String.Format("Tried to save a Settings property called \"{0}\", but it doesn't exist.", item.Key));
-				var stringValue = Convert.ToString(item.Value);
-				switch (property.PropertyType.FullName)
-				{
-					case "System.Boolean":
-						var state = stringValue.Contains("true"); // hack to handle double values in MVC checkbox controls
-						property.SetValue(_settings, Convert.ToBoolean(state), null);
-						break;
-					case "System.String":
-						property.SetValue(_settings, stringValue, null);
-						break;
-					case "System.Int32":
-						property.SetValue(_settings, Convert.ToInt32(stringValue), null);
-						break;
-					case "System.Double":
-						property.SetValue(_settings, Convert.ToDouble(stringValue), null);
-						break;
-					case "System.DateTime":
-						property.SetValue(_settings, Convert.ToDateTime(stringValue), null);
-						break;
-					default:
-						throw new Exception(String.Format("Settings save not coded to convert values of type {0}.", property.PropertyType.FullName));
-				}
-			}
 			SaveCurrent();
 		}
 
@@ -136,11 +92,6 @@ namespace PopForums.Configuration
 				}
 				_settingsRepository.Save(dictionary);
 			}
-		}
-
-		public void FlushCurrent()
-		{
-			_settings = null;
 		}
 	}
 }

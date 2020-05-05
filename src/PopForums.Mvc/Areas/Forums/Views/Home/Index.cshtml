@@ -4,16 +4,17 @@
 @{
 	ViewBag.Title = Model.ForumTitle;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
-	var user = UserRetrievalShim.GetUser(Context);
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var user = UserRetrievalShim.GetUser();
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent{
-<script type="text/javascript">
-	$(function () {
-		PopForums.homeSetup();
-	});
-</script>
+	<link rel="sitemap" href="@ViewBag.SitemapUrl" type="application/xml" />
+	<script type="text/javascript">
+		$(function () {
+			PopForums.homeSetup();
+		});
+	</script>
 }
 
 <h1>@Model.ForumTitle</h1>
@@ -25,7 +26,7 @@
 	</form>
 }
 
-<table class="table grid">
+<table class="table mt-3">
 	<tbody>
 		@foreach (var forum in Model.UncategorizedForums)
 		{
@@ -34,7 +35,7 @@
 				<td>
 					<h2><a asp-controller="Forum" asp-action="Index" asp-route-urlName="@forum.UrlName">@forum.Title</a></h2>
 					<p>@forum.Description</p>
-					<small class="float-right text-secondary forumDetails">
+					<small class="float-right text-secondary d-none d-sm-block">
 						@PopForums.Resources.Topics: <span class="topicCount">@forum.TopicCount.ToString("N0")</span> | @PopForums.Resources.Posts: <span class="postCount">@forum.PostCount.ToString("N0")</span> | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc="@forum.LastPostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(forum.LastPostTime, profile)</span> @PopForums.Resources.By <span class="lastPostName">@forum.LastPostName</span>
 					</small>
 				</td>
@@ -52,7 +53,7 @@
 					<td>
 						<h2><a asp-controller="Forum" asp-action="Index" asp-route-urlName="@forum.UrlName">@forum.Title</a></h2>
 						<p>@forum.Description</p>
-						<small class="float-right text-secondary forumDetails">
+						<small class="float-right text-secondary d-none d-sm-block">
 							@PopForums.Resources.Topics: <span class="topicCount">@forum.TopicCount.ToString("N0")</span> | @PopForums.Resources.Posts: <span class="postCount">@forum.PostCount.ToString("N0")</span> | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc="@forum.LastPostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(forum.LastPostTime, profile)</span> @PopForums.Resources.By <span class="lastPostName">@forum.LastPostName</span>
 						</small>
 					</td>
@@ -64,7 +65,8 @@
 
 <div>
 	<h3>@PopForums.Resources.UsersOnline</h3>
-	<p>@PopForums.Resources.Total: @ViewBag.TotalUsers@foreach (var u in (List<PopForums.Models.User>)ViewBag.OnlineUsers)
+	<p>
+		@PopForums.Resources.Total: @ViewBag.TotalUsers@foreach (var u in (List<PopForums.Models.User>)ViewBag.OnlineUsers)
 		{<text>, </text><a asp-controller="Account" asp-action="ViewProfile" asp-route-id="@u.UserID">@u.Name</a>}
 	</p>
 	<p>@PopForums.Resources.TotalTopics: @ViewBag.TopicCount, @PopForums.Resources.TotalPosts: @ViewBag.PostCount, @PopForums.Resources.RegisteredUsers: @ViewBag.RegisteredUsers</p>

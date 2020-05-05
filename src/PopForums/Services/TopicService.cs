@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security;
+using System.Threading.Tasks;
 using PopForums.Configuration;
 using PopForums.Extensions;
-using PopForums.Messaging;
 using PopForums.Models;
 using PopForums.Repositories;
 using PopForums.ScoringGame;
@@ -13,260 +12,263 @@ namespace PopForums.Services
 {
 	public interface ITopicService
 	{
-		List<Topic> GetTopics(Forum forum, bool includeDeleted, int pageIndex, out PagerContext pagerContext);
-		Topic Get(string urlName);
-		Topic Get(int topicID);
-		void CloseTopic(Topic topic, User user);
-		void OpenTopic(Topic topic, User user);
-		void PinTopic(Topic topic, User user);
-		void UnpinTopic(Topic topic, User user);
-		void DeleteTopic(Topic topic, User user);
-		void UndeleteTopic(Topic topic, User user);
-		void UpdateTitleAndForum(Topic topic, Forum forum, string newTitle, User user);
-		List<Topic> GetTopics(User viewingUser, User postUser, bool includeDeleted, int pageIndex, out PagerContext pagerContext);
-		void RecalculateReplyCount(Topic topic);
-		List<Topic> GetTopics(User viewingUser, Forum forum, bool includeDeleted);
-		void UpdateLast(Topic topic);
-		int TopicLastPostID(int topicID);
-		void HardDeleteTopic(Topic topic, User user);
-		void SetAnswer(User user, Topic topic, Post post, string userUrl, string topicUrl);
-		void QueueTopicForIndexing(int topicID);
+		Task<Tuple<List<Topic>, PagerContext>> GetTopics(Forum forum, bool includeDeleted, int pageIndex);
+		Task<Topic> Get(string urlName);
+		Task<Topic> Get(int topicID);
+		Task CloseTopic(Topic topic, User user);
+		Task OpenTopic(Topic topic, User user);
+		Task PinTopic(Topic topic, User user);
+		Task UnpinTopic(Topic topic, User user);
+		Task DeleteTopic(Topic topic, User user);
+		Task UndeleteTopic(Topic topic, User user);
+		Task UpdateTitleAndForum(Topic topic, Forum forum, string newTitle, User user);
+		Task<Tuple<List<Topic>, PagerContext>> GetTopics(User viewingUser, User postUser, bool includeDeleted, int pageIndex);
+		Task RecalculateReplyCount(Topic topic);
+		Task<List<Topic>> GetTopics(User viewingUser, Forum forum, bool includeDeleted);
+		Task UpdateLast(Topic topic);
+		Task<int> TopicLastPostID(int topicID);
+		Task HardDeleteTopic(Topic topic, User user);
+		Task SetAnswer(User user, Topic topic, Post post, string userUrl, string topicUrl);
+		Task QueueTopicForIndexing(int topicID);
+		Task CloseAgedTopics();
 	}
 
 	public class TopicService : ITopicService
 	{
-		public TopicService(IForumRepository forumRepository, ITopicRepository topicRepository, IPostRepository postRepository, IProfileRepository profileRepository, ITextParsingService textParsingService, ISettingsManager settingsManager, ISubscribedTopicsService subscribedTopicsService, IModerationLogService moderationLogService, IForumService forumService, IEventPublisher eventPublisher, IBroker broker, ISearchRepository searchRepository, IUserRepository userRepository, ISearchIndexQueueRepository searchIndexQueueRepository, ITenantService tenantService)
+		public TopicService(ITopicRepository topicRepository, IPostRepository postRepository, ISettingsManager settingsManager, IModerationLogService moderationLogService, IForumService forumService, IEventPublisher eventPublisher, ISearchRepository searchRepository, IUserRepository userRepository, ISearchIndexQueueRepository searchIndexQueueRepository, ITenantService tenantService)
 		{
-			_forumRepository = forumRepository;
 			_topicRepository = topicRepository;
 			_postRepository = postRepository;
-			_profileRepository = profileRepository;
 			_settingsManager = settingsManager;
-			_textParsingService = textParsingService;
-			_subscribedTopicService = subscribedTopicsService;
 			_moderationLogService = moderationLogService;
 			_forumService = forumService;
 			_eventPublisher = eventPublisher;
-			_broker = broker;
 			_searchRepository = searchRepository;
 			_userRepository = userRepository;
 			_searchIndexQueueRepository = searchIndexQueueRepository;
 			_tenantService = tenantService;
 		}
 
-		private readonly IForumRepository _forumRepository;
 		private readonly ITopicRepository _topicRepository;
 		private readonly IPostRepository _postRepository;
-		private readonly IProfileRepository _profileRepository;
 		private readonly ISettingsManager _settingsManager;
-		private readonly ITextParsingService _textParsingService;
-		private readonly ISubscribedTopicsService _subscribedTopicService;
 		private readonly IModerationLogService _moderationLogService;
 		private readonly IForumService _forumService;
 		private readonly IEventPublisher _eventPublisher;
-		private readonly IBroker _broker;
 		private readonly ISearchRepository _searchRepository;
 		private readonly IUserRepository _userRepository;
 		private readonly ISearchIndexQueueRepository _searchIndexQueueRepository;
 		private readonly ITenantService _tenantService;
 
-		public List<Topic> GetTopics(Forum forum, bool includeDeleted, int pageIndex, out PagerContext pagerContext)
+		public async Task<Tuple<List<Topic>, PagerContext>> GetTopics(Forum forum, bool includeDeleted, int pageIndex)
 		{
 			var pageSize = _settingsManager.Current.TopicsPerPage;
 			var startRow = ((pageIndex - 1) * pageSize) + 1;
-			var topics = _topicRepository.Get(forum.ForumID, includeDeleted, startRow, pageSize);
+			var topics = await _topicRepository.Get(forum.ForumID, includeDeleted, startRow, pageSize);
 			int topicCount;
 			if (includeDeleted)
-				topicCount = _topicRepository.GetTopicCount(forum.ForumID, true);
+				topicCount = await _topicRepository.GetTopicCount(forum.ForumID, true);
 			else
 				topicCount = forum.TopicCount;
 			var totalPages = Convert.ToInt32(Math.Ceiling(Convert.ToDouble(topicCount) / Convert.ToDouble(pageSize)));
-			pagerContext = new PagerContext { PageCount = totalPages, PageIndex = pageIndex, PageSize = pageSize };
+			var pagerContext = new PagerContext { PageCount = totalPages, PageIndex = pageIndex, PageSize = pageSize };
+			return Tuple.Create(topics, pagerContext);
+		}
+
+		public async Task<List<Topic>> GetTopics(User viewingUser, Forum forum, bool includeDeleted)
+		{
+			var nonViewableForumIDs = await _forumService.GetNonViewableForumIDs(viewingUser);
+			var topics = await _topicRepository.Get(forum.ForumID, includeDeleted, nonViewableForumIDs);
 			return topics;
 		}
 
-		public List<Topic> GetTopics(User viewingUser, Forum forum, bool includeDeleted)
+		public async Task<Tuple<List<Topic>, PagerContext>> GetTopics(User viewingUser, User postUser, bool includeDeleted, int pageIndex)
 		{
-			var nonViewableForumIDs = _forumService.GetNonViewableForumIDs(viewingUser);
-			var topics = _topicRepository.Get(forum.ForumID, includeDeleted, nonViewableForumIDs);
-			return topics;
-		}
-
-		public List<Topic> GetTopics(User viewingUser, User postUser, bool includeDeleted, int pageIndex, out PagerContext pagerContext)
-		{
-			var nonViewableForumIDs = _forumService.GetNonViewableForumIDs(viewingUser);
+			var nonViewableForumIDs = await _forumService.GetNonViewableForumIDs(viewingUser);
 			var pageSize = _settingsManager.Current.TopicsPerPage;
 			var startRow = ((pageIndex - 1) * pageSize) + 1;
-			var topics = _topicRepository.GetTopicsByUser(postUser.UserID, includeDeleted, nonViewableForumIDs, startRow, pageSize);
-			var topicCount = _topicRepository.GetTopicCountByUser(postUser.UserID, includeDeleted, nonViewableForumIDs);
+			var topics = await _topicRepository.GetTopicsByUser(postUser.UserID, includeDeleted, nonViewableForumIDs, startRow, pageSize);
+			var topicCount = await _topicRepository.GetTopicCountByUser(postUser.UserID, includeDeleted, nonViewableForumIDs);
 			var totalPages = Convert.ToInt32(Math.Ceiling(Convert.ToDouble(topicCount) / Convert.ToDouble(pageSize)));
-			pagerContext = new PagerContext { PageCount = totalPages, PageIndex = pageIndex, PageSize = pageSize };
-			return topics;
+			var pagerContext = new PagerContext { PageCount = totalPages, PageIndex = pageIndex, PageSize = pageSize };
+			return Tuple.Create(topics, pagerContext);
 		}
 
-		public Topic Get(string urlName)
+		public async Task<Topic> Get(string urlName)
 		{
-			return _topicRepository.Get(urlName);
+			return await _topicRepository.Get(urlName);
 		}
 
-		public Topic Get(int topicID)
+		public async Task<Topic> Get(int topicID)
 		{
-			return _topicRepository.Get(topicID);
+			return await _topicRepository.Get(topicID);
 		}
 
-		public void CloseTopic(Topic topic, User user)
+		public async Task CloseTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicClose, topic, null);
-				_topicRepository.CloseTopic(topic.TopicID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicClose, topic, null);
+				await _topicRepository.CloseTopic(topic.TopicID);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to close topic.");
 		}
 
-		public void OpenTopic(Topic topic, User user)
+		public async Task OpenTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicOpen, topic, null);
-				_topicRepository.OpenTopic(topic.TopicID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicOpen, topic, null);
+				await _topicRepository.OpenTopic(topic.TopicID);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to open topic.");
 		}
 
-		public void PinTopic(Topic topic, User user)
+		public async Task PinTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicPin, topic, null);
-				_topicRepository.PinTopic(topic.TopicID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicPin, topic, null);
+				await _topicRepository.PinTopic(topic.TopicID);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to pin topic.");
 		}
 
-		public void UnpinTopic(Topic topic, User user)
+		public async Task UnpinTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicUnpin, topic, null);
-				_topicRepository.UnpinTopic(topic.TopicID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicUnpin, topic, null);
+				await _topicRepository.UnpinTopic(topic.TopicID);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to unpin topic.");
 		}
 
-		public void DeleteTopic(Topic topic, User user)
+		public async Task DeleteTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator) || user.UserID == topic.StartedByUserID)
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicDelete, topic, null);
-				_topicRepository.DeleteTopic(topic.TopicID);
-				RecalculateReplyCount(topic);
-				var forum = _forumService.Get(topic.ForumID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicDelete, topic, null);
+				await _topicRepository.DeleteTopic(topic.TopicID);
+				await _searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topic.TopicID, IsForRemoval = true });
+				await RecalculateReplyCount(topic);
+				var forum = await _forumService.Get(topic.ForumID);
 				_forumService.UpdateCounts(forum);
-				_forumService.UpdateLast(forum);
+				await _forumService.UpdateLast(forum);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator or topic starter to delete topic.");
 		}
 
-		public void HardDeleteTopic(Topic topic, User user)
+		public async Task HardDeleteTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Admin))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicDeletePermanently, topic, null);
-				_searchRepository.DeleteAllIndexedWordsForTopic(topic.TopicID);
-				_topicRepository.HardDeleteTopic(topic.TopicID);
-				var forum = _forumService.Get(topic.ForumID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicDeletePermanently, topic, null);
+				await _searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topic.TopicID, IsForRemoval = true });
+				await _topicRepository.HardDeleteTopic(topic.TopicID);
+				var forum = await _forumService.Get(topic.ForumID);
 				_forumService.UpdateCounts(forum);
-				_forumService.UpdateLast(forum);
+				await _forumService.UpdateLast(forum);
 			}
 			else
 				throw new InvalidOperationException("User must be Admin to hard delete topic.");
 		}
 
-		public void UndeleteTopic(Topic topic, User user)
+		public async Task UndeleteTopic(Topic topic, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				_moderationLogService.LogTopic(user, ModerationType.TopicUndelete, topic, null);
-				_topicRepository.UndeleteTopic(topic.TopicID);
-				RecalculateReplyCount(topic);
-				var forum = _forumService.Get(topic.ForumID);
+				await _moderationLogService.LogTopic(user, ModerationType.TopicUndelete, topic, null);
+				await _topicRepository.UndeleteTopic(topic.TopicID);
+				await _searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topic.TopicID, IsForRemoval = false });
+				await RecalculateReplyCount(topic);
+				var forum = await _forumService.Get(topic.ForumID);
 				_forumService.UpdateCounts(forum);
-				_forumService.UpdateLast(forum);
+				await _forumService.UpdateLast(forum);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to undelete topic.");
 		}
 
-		public void UpdateTitleAndForum(Topic topic, Forum forum, string newTitle, User user)
+		public async Task UpdateTitleAndForum(Topic topic, Forum forum, string newTitle, User user)
 		{
 			if (user.IsInRole(PermanentRoles.Moderator))
 			{
-				var oldTopic = _topicRepository.Get(topic.TopicID);
+				var oldTopic = await _topicRepository.Get(topic.TopicID);
 				if (oldTopic.ForumID != forum.ForumID)
-					_moderationLogService.LogTopic(user, ModerationType.TopicMoved, topic, forum, String.Format("Moved from {0} to {1}", oldTopic.ForumID, forum.ForumID));
+					await _moderationLogService.LogTopic(user, ModerationType.TopicMoved, topic, forum, $"Moved from {oldTopic.ForumID} to {forum.ForumID}");
 				if (oldTopic.Title != newTitle)
-					_moderationLogService.LogTopic(user, ModerationType.TopicRenamed, topic, forum, String.Format("Renamed from \"{0}\" to \"{1}\"", oldTopic.Title, newTitle));
-				var urlName = newTitle.ToUniqueUrlName(_topicRepository.GetUrlNamesThatStartWith(newTitle.ToUrlName()));
+					await _moderationLogService.LogTopic(user, ModerationType.TopicRenamed, topic, forum, $"Renamed from \"{oldTopic.Title}\" to \"{newTitle}\"");
+				var urlName = newTitle.ToUniqueUrlName(await _topicRepository.GetUrlNamesThatStartWith(newTitle.ToUrlName()));
 				topic.UrlName = urlName;
-				_topicRepository.UpdateTitleAndForum(topic.TopicID, forum.ForumID, newTitle, urlName);
-				_searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topic.TopicID });
+				await _topicRepository.UpdateTitleAndForum(topic.TopicID, forum.ForumID, newTitle, urlName);
+				await _searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topic.TopicID, IsForRemoval = false });
 				_forumService.UpdateCounts(forum);
-				_forumService.UpdateLast(forum);
-				var oldForum = _forumService.Get(oldTopic.ForumID);
+				await _forumService.UpdateLast(forum);
+				var oldForum = await _forumService.Get(oldTopic.ForumID);
 				_forumService.UpdateCounts(oldForum);
-				_forumService.UpdateLast(oldForum);
+				await _forumService.UpdateLast(oldForum);
 			}
 			else
 				throw new InvalidOperationException("User must be Moderator to update topic title or move topic.");
 		}
 
-		public void RecalculateReplyCount(Topic topic)
+		public async Task RecalculateReplyCount(Topic topic)
 		{
-			var replyCount = _postRepository.GetReplyCount(topic.TopicID, false);
-			_topicRepository.UpdateReplyCount(topic.TopicID, replyCount);
+			var replyCount = await _postRepository.GetReplyCount(topic.TopicID, false);
+			await _topicRepository.UpdateReplyCount(topic.TopicID, replyCount);
 		}
 
-		public void UpdateLast(Topic topic)
+		public async Task UpdateLast(Topic topic)
 		{
-			var post = _postRepository.GetLastInTopic(topic.TopicID);
-			_topicRepository.UpdateLastTimeAndUser(topic.TopicID, post.UserID, post.Name, post.PostTime);
+			var post = await _postRepository.GetLastInTopic(topic.TopicID);
+			await _topicRepository.UpdateLastTimeAndUser(topic.TopicID, post.UserID, post.Name, post.PostTime);
 		}
 
-		public int TopicLastPostID(int topicID)
+		public async Task<int> TopicLastPostID(int topicID)
 		{
-			var post = _postRepository.GetLastInTopic(topicID);
+			var post = await _postRepository.GetLastInTopic(topicID);
 			if (post == null)
 				return 0;
 			return post.PostID;
 		}
 
-		public void SetAnswer(User user, Topic topic, Post post, string userUrl, string topicUrl)
+		public async Task SetAnswer(User user, Topic topic, Post post, string userUrl, string topicUrl)
 		{
 			if (user.UserID != topic.StartedByUserID)
 				throw new SecurityException("Only the user that started a topic may set its answer.");
 			if (post == null || post.TopicID != topic.TopicID)
 				throw new InvalidOperationException("You can't use a post as an answer unless it's a child of the topic.");
-			var answerUser = _userRepository.GetUser(post.UserID);
+			var answerUser = await _userRepository.GetUser(post.UserID);
 			if (answerUser != null // answer user is still valid
 				&& !topic.AnswerPostID.HasValue && // an answer wasn't already chosen
 				topic.StartedByUserID != post.UserID) // the answer isn't coming from the question asker
 			{
 				// <a href="{0}">{1}</a> chose an answer for the question: <a href="{2}">{3}</a>
 				var message = String.Format(Resources.QuestionAnswered, userUrl, user.Name, topicUrl, topic.Title);
-				_eventPublisher.ProcessEvent(message, answerUser, EventDefinitionService.StaticEventIDs.QuestionAnswered, false);
+				await _eventPublisher.ProcessEvent(message, answerUser, EventDefinitionService.StaticEventIDs.QuestionAnswered, false);
 			}
-			_topicRepository.UpdateAnswerPostID(topic.TopicID, post.PostID);
+			await _topicRepository.UpdateAnswerPostID(topic.TopicID, post.PostID);
 		}
 
-		public void QueueTopicForIndexing(int topicID)
+		public async Task QueueTopicForIndexing(int topicID)
 		{
-			_searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topicID });
+			await _searchIndexQueueRepository.Enqueue(new SearchIndexPayload { TenantID = _tenantService.GetTenant(), TopicID = topicID, IsForRemoval = false });
+		}
+
+		public async Task CloseAgedTopics()
+		{
+			if (!_settingsManager.Current.IsClosingAgedTopics)
+				return;
+			var ageCutoff = DateTime.UtcNow.AddDays(-_settingsManager.Current.CloseAgedTopicsDays);
+			var list = await _topicRepository.CloseTopicsOlderThan(ageCutoff);
+			foreach (var id in list)
+				await _moderationLogService.LogTopic(ModerationType.TopicCloseAuto, id);
 		}
 	}
 }

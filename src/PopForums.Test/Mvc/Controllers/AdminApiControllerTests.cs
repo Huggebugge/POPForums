@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Microsoft.AspNetCore.Http;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using PopForums.Configuration;
@@ -59,37 +59,37 @@ namespace PopForums.Test.Mvc.Controllers
 		public class SaveForum : AdminApiControllerTests
 		{
 			[Fact]
-			public void CallsCreateIfForumIDIsZero()
+			public async Task CallsCreateIfForumIDIsZero()
 			{
 				var controller = GetController();
 				var forum = new Forum {ForumID = 0, CategoryID = 1, Title = "tt", Description = "dd", IsVisible = true, IsArchived = true, IsQAForum = true, ForumAdapterName = "ff"};
 
-				controller.SaveForum(forum);
+				await controller.SaveForum(forum);
 
 				_forumService.Verify(x => x.Create(forum.CategoryID, forum.Title, forum.Description, forum.IsVisible, forum.IsArchived, -1, forum.ForumAdapterName, forum.IsQAForum), Times.Once);
 				_forumService.Verify(x => x.Update(It.IsAny<Forum>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
 			}
 
 			[Fact]
-			public void CallsUpdateIfForumIDIsNotZero()
+			public async Task CallsUpdateIfForumIDIsNotZero()
 			{
 				var controller = GetController();
 				var forum = new Forum { ForumID = 123, CategoryID = 1, Title = "tt", Description = "dd", IsVisible = true, IsArchived = true, IsQAForum = true, ForumAdapterName = "ff" };
 				var retrievedForum = new Forum();
-				_forumService.Setup(x => x.Get(forum.ForumID)).Returns(retrievedForum);
+				_forumService.Setup(x => x.Get(forum.ForumID)).ReturnsAsync(retrievedForum);
 
-				controller.SaveForum(forum);
+				await controller.SaveForum(forum);
 
 				_forumService.Verify(x => x.Update(retrievedForum, forum.CategoryID, forum.Title, forum.Description, forum.IsVisible, forum.IsArchived, forum.ForumAdapterName, forum.IsQAForum), Times.Once);
 				_forumService.Verify(x => x.Create(It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
 			}
 			[Fact]
-			public void ReturnsNotFoundIfForumIsNotReal()
+			public async Task ReturnsNotFoundIfForumIsNotReal()
 			{
 				var controller = GetController();
-				_forumService.Setup(x => x.Get(It.IsAny<int>())).Returns((Forum)null);
+				_forumService.Setup(x => x.Get(It.IsAny<int>())).ReturnsAsync((Forum)null);
 
-				var result = controller.SaveForum(new Forum{ForumID = 123});
+				var result = await controller.SaveForum(new Forum{ForumID = 123});
 
 				_forumService.Verify(x => x.Update(It.IsAny<Forum>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
 				_forumService.Verify(x => x.Create(It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
@@ -100,19 +100,19 @@ namespace PopForums.Test.Mvc.Controllers
 		public class GetForumPermissions : AdminApiControllerTests
 		{
 			[Fact]
-			public void ContainerIsComposed()
+			public async Task ContainerIsComposed()
 			{
 				var controller = GetController();
 				var forum = new Forum{ForumID = 123};
-				_forumService.Setup(x => x.Get(forum.ForumID)).Returns(forum);
+				_forumService.Setup(x => x.Get(forum.ForumID)).ReturnsAsync(forum);
 				var all = new List<string> {"a", "b"};
-				_userService.Setup(x => x.GetAllRoles()).Returns(all);
+				_userService.Setup(x => x.GetAllRoles()).ReturnsAsync(all);
 				var allView = new List<string> {"c", "d"};
-				_forumService.Setup(x => x.GetForumViewRoles(forum)).Returns(allView);
+				_forumService.Setup(x => x.GetForumViewRoles(forum)).ReturnsAsync(allView);
 				var allPost = new List<string> {"e", "f"};
-				_forumService.Setup(x => x.GetForumPostRoles(forum)).Returns(allPost);
+				_forumService.Setup(x => x.GetForumPostRoles(forum)).ReturnsAsync(allPost);
 
-				var container = controller.GetForumPermissions(forum.ForumID);
+				var container = await controller.GetForumPermissions(forum.ForumID);
 
 				Assert.Equal(forum.ForumID, container.Value.ForumID);
 				Assert.Same(all, container.Value.AllRoles);
@@ -124,42 +124,42 @@ namespace PopForums.Test.Mvc.Controllers
 		public class EditUserSearch : AdminApiControllerTests
 		{
 			[Fact]
-			public void NameSearchCallsNameSearch()
+			public async Task NameSearchCallsNameSearch()
 			{
 				var controller = GetController();
 				var text = "abc";
 				var list = new List<User>();
-				_userService.Setup(x => x.SearchByName(text)).Returns(list);
+				_userService.Setup(x => x.SearchByName(text)).ReturnsAsync(list);
 
-				var result = controller.EditUserSearch(new UserSearch {SearchText = text, SearchType = UserSearch.UserSearchType.Name});
+				var result = await controller.EditUserSearch(new UserSearch {SearchText = text, SearchType = UserSearch.UserSearchType.Name});
 
 				_userService.Verify(x => x.SearchByName(text), Times.Once);
 				Assert.Same(list, result.Value);
 			}
 
 			[Fact]
-			public void EmailSearchCallsEmailSearch()
+			public async Task EmailSearchCallsEmailSearch()
 			{
 				var controller = GetController();
 				var text = "abc";
 				var list = new List<User>();
-				_userService.Setup(x => x.SearchByEmail(text)).Returns(list);
+				_userService.Setup(x => x.SearchByEmail(text)).ReturnsAsync(list);
 
-				var result = controller.EditUserSearch(new UserSearch { SearchText = text, SearchType = UserSearch.UserSearchType.Email });
+				var result = await controller.EditUserSearch(new UserSearch { SearchText = text, SearchType = UserSearch.UserSearchType.Email });
 
 				_userService.Verify(x => x.SearchByEmail(text), Times.Once);
 				Assert.Same(list, result.Value);
 			}
 
 			[Fact]
-			public void RoleSearchCallsRoleSearch()
+			public async Task RoleSearchCallsRoleSearch()
 			{
 				var controller = GetController();
 				var text = "abc";
 				var list = new List<User>();
-				_userService.Setup(x => x.SearchByRole(text)).Returns(list);
+				_userService.Setup(x => x.SearchByRole(text)).ReturnsAsync(list);
 
-				var result = controller.EditUserSearch(new UserSearch { SearchText = text, SearchType = UserSearch.UserSearchType.Role });
+				var result = await controller.EditUserSearch(new UserSearch { SearchText = text, SearchType = UserSearch.UserSearchType.Role });
 
 				_userService.Verify(x => x.SearchByRole(text), Times.Once);
 				Assert.Same(list, result.Value);

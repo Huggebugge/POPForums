@@ -5,8 +5,8 @@
 	ViewBag.Title = PopForums.Resources.Search;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
 	var routeParameters = new Dictionary<string, object> { { "query", ViewBag.Query }, { "searchType", ViewBag.SearchType } };
-	var user = UserRetrievalShim.GetUser(Context);
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var user = UserRetrievalShim.GetUser();
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent {
@@ -17,18 +17,13 @@
 	</script>
 }
 
-<div>
-	<h1>@PopForums.Resources.Search</h1>
-	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent" asp-route-page="">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-	</ul>
-	<ul id="FixedBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent" asp-route-page="">@PopForums.Resources.Recent</a></li>
-		<li class="breadcrumb-item"><span class="glyphicon glyphicon-chevron-up"></span> <a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
-		<li class="breadcrumb-item active">@PopForums.Resources.Search</li>
-	</ul>
-</div>
+<h1>@PopForums.Resources.Search</h1>
+
+<ul id="TopBreadcrumb" class="breadcrumb sticky-top">
+	<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent" asp-route-pageNumber="">@PopForums.Resources.Recent</a></li>
+	<li class="breadcrumb-item"><span class="glyphicon glyphicon-chevron-up"></span> <a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
+	<li class="breadcrumb-item active">@PopForums.Resources.Search</li>
+</ul>
 
 <div id="SearchForm">
 	<form asp-action="Process" method="post" role="form" class="form-inline mb-4" asp-antiforgery="false">
@@ -55,7 +50,7 @@
 }
 else
 {
-	<table id="TopicList" class="table grid table-hover">
+	<table id="TopicList" class="table mt-3 table-hover">
 		@foreach (var topic in Model.Topics)
 		{
 			<tr @if (topic.IsDeleted) { <text> class="bg-warning" </text>   }>
@@ -70,8 +65,8 @@ else
 					}
 				</td>
 				<td>
-					<h2>@Html.ActionLink(topic.Title, "Topic", "Forum", new { id = topic.UrlName, page = 1 }, null)</h2>
-					<small class="pull-right forumDetails">
+					<h2>@Html.ActionLink(topic.Title, "Topic", "Forum", new { id = topic.UrlName, pageNumber = 1 }, null)</h2>
+					<small class="float-right d-none d-sm-block">
 						@PopForums.Resources.StartedBy: @topic.StartedByName @PopForums.Resources.In @Model.ForumTitles[topic.ForumID] | @PopForums.Resources.Views: @topic.ViewCount | @PopForums.Resources.Replies: @topic.ReplyCount | @PopForums.Resources.Last: <span class="lastPostTime fTime" data-utc="@topic.LastPostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(topic.LastPostTime, profile)</span> @PopForums.Resources.By @topic.LastPostName
 					</small>
 				</td>

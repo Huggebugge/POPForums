@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using PopForums.Models;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.Services;
@@ -25,43 +27,42 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 
 		public static string Name = "Favorites";
 
-		public ViewResult Topics(int page = 1)
+		public async Task<ViewResult> Topics(int pageNumber = 1)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return View();
-			PagerContext pagerContext;
-			var topics = _favoriteTopicService.GetTopics(user, page, out pagerContext);
+			var (topics, pagerContext) = await _favoriteTopicService.GetTopics(user, pageNumber);
 			var titles = _forumService.GetAllForumTitles();
 			var container = new PagedTopicContainer { PagerContext = pagerContext, Topics = topics, ForumTitles = titles };
-			_lastReadService.GetTopicReadStatus(user, container);
+			await _lastReadService.GetTopicReadStatus(user, container);
 			return View(container);
 		}
 
 		[HttpPost]
-		public ActionResult RemoveFavorite(int id)
+		public async Task<ActionResult> RemoveFavorite(int id)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			var topic = _topicService.Get(id);
-			_favoriteTopicService.RemoveFavoriteTopic(user, topic);
+			var user = _userRetrievalShim.GetUser();
+			var topic = await _topicService.Get(id);
+			await _favoriteTopicService.RemoveFavoriteTopic(user, topic);
 			return RedirectToAction("Topics");
 		}
 
 		[HttpPost]
-		public JsonResult ToggleFavorite(int id)
+		public async Task<JsonResult> ToggleFavorite(int id)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return Json(new BasicJsonMessage { Message = Resources.NotLoggedIn, Result = false });
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return Json(new BasicJsonMessage { Message = Resources.TopicNotExist, Result = false });
-			if (_favoriteTopicService.IsTopicFavorite(user, topic))
+			if (await _favoriteTopicService.IsTopicFavorite(user, topic))
 			{
-				_favoriteTopicService.RemoveFavoriteTopic(user, topic);
+				await _favoriteTopicService.RemoveFavoriteTopic(user, topic);
 				return Json(new BasicJsonMessage { Data = new { isFavorite = false }, Result = true });
 			}
-			_favoriteTopicService.AddFavoriteTopic(user, topic);
+			await _favoriteTopicService.AddFavoriteTopic(user, topic);
 			return Json(new BasicJsonMessage { Data = new { isFavorite = true }, Result = true });
 		}
 	}

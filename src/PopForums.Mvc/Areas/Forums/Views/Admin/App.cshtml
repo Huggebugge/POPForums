@@ -182,6 +182,21 @@
 					</div>
 				</div>
 			</div>
+			<div class="form-group row">
+				<div class="col-sm-8 offset-sm-4">
+					<div class="checkbox"><label for="CloseOldTopics"><input type="checkbox" v-model="settings.isClosingAgedTopics" id="CloseOldTopics" /> @PopForums.Resources.CloseOldTopics</label></div>
+				</div>
+			</div>
+			<div class="form-group row">
+				<div class="col-sm-8 offset-sm-4 form-inline">
+					<div class="input-group col-sm-4">
+						<input type="text" v-model="settings.closeAgedTopicsDays" class="form-control" />
+						<div class="input-group-append">
+							<div class="input-group-text">@PopForums.Resources.Days</div>
+						</div>
+					</div>
+				</div>
+			</div>
 
 			<h3>@PopForums.Resources.Parsing</h3>
 
@@ -190,7 +205,7 @@
 				<div class="col-sm-8"><textarea class="form-control" rows="3" v-model="settings.censorWords"></textarea></div>
 			</div>
 			<div class="form-group row">
-				<label for="CensorCharacter" class="col-sm-4 col-form-label">@PopForums.Resources.Title</label>
+				<label for="CensorCharacter" class="col-sm-4 col-form-label">@PopForums.Resources.CensorReplacementChar</label>
 				<div class="col-sm-3"><input type="text" v-model="settings.censorCharacter" class="form-control" /></div>
 			</div>
 			<div class="form-group row">
@@ -225,7 +240,8 @@
 					<select id="ServerTimeZone" v-model="settings.serverTimeZone" class="form-control">
 						@foreach (var i in timeZones)
 						{
-							<option value="@i.Key">@i.Value</option>}
+							<option value="@i.Key">@i.Value</option>
+}
 					</select>
 				</div>
 			</div>
@@ -511,13 +527,12 @@
 <script type="x-templates" id="ExternalLogins">
 	<main>
 		<h2>@PopForums.Resources.ExternalLogins</h2>
-
-		<p>@PopForums.Resources.AppRestartRequired</p>
+		<p>(registered redirect URI is https://yourdomain/Forums/Identity/CallbackHandler)</p>
 
 		<table class="table">
 			<tr>
 				<th>Google</th>
-				<td><input type="checkbox" v-model="settings.useGoogleLogin" /> (registered redirect URI is http://yourdomain/signin-google)</td>
+				<td><input type="checkbox" v-model="settings.useGoogleLogin" /></td>
 			</tr>
 			<tr>
 				<td>ClientId:</td>
@@ -540,18 +555,6 @@
 				<td><input type="text" v-model="settings.facebookAppSecret" class="form-control" /></td>
 			</tr>
 			<tr>
-				<th>Twitter</th>
-				<td><input type="checkbox" v-model="settings.useTwitterLogin" /></td>
-			</tr>
-			<tr>
-				<td>ConsumerKey:</td>
-				<td><input type="text" v-model="settings.twitterConsumerKey" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>ConsumerSecret:</td>
-				<td><input type="text" v-model="settings.twitterConsumerSecret" class="form-control" /></td>
-			</tr>
-			<tr>
 				<th>Microsoft</th>
 				<td><input type="checkbox" v-model="settings.useMicrosoftLogin" /></td>
 			</tr>
@@ -562,6 +565,34 @@
 			<tr>
 				<td>ClientSecret:</td>
 				<td><input type="text" v-model="settings.microsoftClientSecret" class="form-control" /></td>
+			</tr>
+			<tr>
+				<th>OAuth2 returning JWT</th>
+				<td><input type="checkbox" v-model="settings.useOAuth2Login" /></td>
+			</tr>
+			<tr>
+				<td>Client ID:</td>
+				<td><input type="text" v-model="settings.oAuth2ClientID" class="form-control" /></td>
+			</tr>
+			<tr>
+				<td>Client Secret:</td>
+				<td><input type="text" v-model="settings.oAuth2ClientSecret" class="form-control" /></td>
+			</tr>
+			<tr>
+				<td>Base login URL:</td>
+				<td><input type="text" v-model="settings.oAuth2LoginUrl" class="form-control" /></td>
+			</tr>
+			<tr>
+				<td>Token URL:</td>
+				<td><input type="text" v-model="settings.oAuth2TokenUrl" class="form-control" /></td>
+			</tr>
+			<tr>
+				<td>Display name:</td>
+				<td><input type="text" v-model="settings.oAuth2DisplayName" class="form-control" /></td>
+			</tr>
+			<tr>
+				<td>Scope (separate by space):</td>
+				<td><input type="text" v-model="settings.oAuth2Scope" class="form-control" /></td>
 			</tr>
 		</table>
 
@@ -575,24 +606,26 @@
 	<main>
 		<h2>@PopForums.Resources.EditUser</h2>
 
-		<div class="form-group row">
-			<div class="col-sm-8"><input type="text" v-model="searchText" class="form-control" /></div>
-			<div class="col-sm-3"><input type="button" v-on:click="search" value="@PopForums.Resources.Search" class="btn btn-primary" /></div>
-		</div>
-		<div class="form-check form-check-inline mb-3">
-			<input class="form-check-input" type="radio" value="name" id="SearchName" v-model="searchType">
-			<label class="form-check-label" for="SearchName">Name</label>
-		</div>
-		<div class="form-check form-check-inline">
-			<input class="form-check-input" type="radio" value="email" id="SearchEmail" v-model="searchType">
-			<label class="form-check-label" for="SearchEmail">Email</label>
-		</div>
-		<div class="form-check form-check-inline">
-			<input class="form-check-input" type="radio" value="role" id="SearchRole" v-model="searchType">
-			<label class="form-check-label" for="SearchRole">Role</label>
-		</div>
-		<transition name="fade"><span v-show="searchAlert" class="alert alert-warning">@PopForums.Resources.NoResults</span></transition>
-		<div v-for="u in searchResults"><router-link :to="{path:'/edituser/'+u.userID}">{{u.name}}</router-link> - {{u.email}}</div>
+		<form v-on:submit.prevent="search">
+			<div class="form-group row">
+				<div class="col-sm-8"><input type="text" v-model="searchText" class="form-control" /></div>
+				<div class="col-sm-3"><input type="button" v-on:click="search" value="@PopForums.Resources.Search" class="btn btn-primary" /></div>
+			</div>
+			<div class="form-check form-check-inline mb-3">
+				<input class="form-check-input" type="radio" value="name" id="SearchName" v-model="searchType">
+				<label class="form-check-label" for="SearchName">Name</label>
+			</div>
+			<div class="form-check form-check-inline">
+				<input class="form-check-input" type="radio" value="email" id="SearchEmail" v-model="searchType">
+				<label class="form-check-label" for="SearchEmail">Email</label>
+			</div>
+			<div class="form-check form-check-inline">
+				<input class="form-check-input" type="radio" value="role" id="SearchRole" v-model="searchType">
+				<label class="form-check-label" for="SearchRole">Role</label>
+			</div>
+		</form>
+			<transition name="fade"><span v-show="searchAlert" class="alert alert-warning">@PopForums.Resources.NoResults</span></transition>
+			<div v-for="u in searchResults"><router-link :to="{path:'/edituser/'+u.userID}">{{u.name}}</router-link> - {{u.email}}</div>
 	</main>
 </script>
 

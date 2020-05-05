@@ -16,7 +16,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 	[Area("Forums")]
 	public class ForumController : Controller
 	{
-		public ForumController(ISettingsManager settingsManager, IForumService forumService, ITopicService topicService, IPostService postService, ITopicViewCountService topicViewCountService, ISubscribedTopicsService subService, ILastReadService lastReadService, IFavoriteTopicService favoriteTopicService, IProfileService profileService, IUserRetrievalShim userRetrievalShim, ITopicViewLogService topicViewLogService, ITextParsingService textParsingService, IPostMasterService postMasterService, IForumPermissionService forumPermissionService)
+		public ForumController(ISettingsManager settingsManager, IForumService forumService, ITopicService topicService, IPostService postService, ITopicViewCountService topicViewCountService, ISubscribedTopicsService subService, ILastReadService lastReadService, IFavoriteTopicService favoriteTopicService, IProfileService profileService, IUserRetrievalShim userRetrievalShim, ITopicViewLogService topicViewLogService, IPostMasterService postMasterService, IForumPermissionService forumPermissionService)
 		{
 			_settingsManager = settingsManager;
 			_forumService = forumService;
@@ -29,7 +29,6 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			_profileService = profileService;
 			_userRetrievalShim = userRetrievalShim;
 			_topicViewLogService = topicViewLogService;
-			_textParsingService = textParsingService;
 			_postMasterService = postMasterService;
 			_forumPermissionService = forumPermissionService;
 		}
@@ -47,33 +46,31 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly IProfileService _profileService;
 		private readonly IUserRetrievalShim _userRetrievalShim;
 		private readonly ITopicViewLogService _topicViewLogService;
-		private readonly ITextParsingService _textParsingService;
 		private readonly IPostMasterService _postMasterService;
 		private readonly IForumPermissionService _forumPermissionService;
 
-		public ActionResult Index(string urlName, int page = 1)
+		public async Task<ActionResult> Index(string urlName, int pageNumber = 1)
 		{
-			if (String.IsNullOrWhiteSpace(urlName))
+			if (string.IsNullOrWhiteSpace(urlName))
 				return NotFound();
-			var forum = _forumService.Get(urlName);
+			var forum = await _forumService.Get(urlName);
 			if (forum == null)
 				return NotFound();
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			var permissionContext = _forumPermissionService.GetPermissionContext(forum, user);
+			var user = _userRetrievalShim.GetUser();
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user);
 			if (!permissionContext.UserCanView)
 			{
 				return StatusCode(403);
 			}
 
-			PagerContext pagerContext;
-			var topics = _topicService.GetTopics(forum, permissionContext.UserCanModerate, page, out pagerContext);
+			var (topics, pagerContext) = await _topicService.GetTopics(forum, permissionContext.UserCanModerate, pageNumber);
 			var container = new ForumTopicContainer { Forum = forum, Topics = topics, PagerContext = pagerContext, PermissionContext = permissionContext };
-			_lastReadService.GetTopicReadStatus(user, container);
+			await _lastReadService.GetTopicReadStatus(user, container);
 			var adapter = new ForumAdapterFactory(forum);
 			if (adapter.IsAdapterEnabled)
 			{
 				adapter.ForumAdapter.AdaptForum(this, container);
-				if (String.IsNullOrWhiteSpace(adapter.ForumAdapter.ViewName))
+				if (string.IsNullOrWhiteSpace(adapter.ForumAdapter.ViewName))
 					return View(adapter.ForumAdapter.Model);
 				return View(adapter.ForumAdapter.ViewName, adapter.ForumAdapter.Model);
 			}
@@ -82,89 +79,82 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View(container);
 		}
 
-		public ActionResult PostTopic(int id)
+		public async Task<ActionResult> PostTopic(int id)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return Content(Resources.LoginToPost);
-			ForumPermissionContext permissionContext;
-			var forum = GetForumByIdWithPermissionContext(id, user, out permissionContext);
+			var (forum, permissionContext) = await GetForumByIdWithPermissionContext(id, user);
 			if (!permissionContext.UserCanView)
 				return Content(Resources.ForumNoView);
 			if (!permissionContext.UserCanPost)
 				return Content(Resources.ForumNoPost);
 
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			var newPost = new NewPost { ItemID = forum.ForumID, IncludeSignature = profile.Signature.Length > 0, IsPlainText = profile.IsPlainText, IsImageEnabled = _settingsManager.Current.AllowImages };
 			return View("NewTopic", newPost);
 		}
 
 		[HttpPost]
-		public JsonResult PostTopic(NewPost newPost)
+		public async Task<IActionResult> PostTopic(NewPost newPost)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
-				return Json(new BasicJsonMessage { Message = Resources.LoginToPost, Result = false });
-			var forum = GetForumByIdWithPermissionContext(newPost.ItemID, user, out var permissionContext);
-			if (!permissionContext.UserCanView)
-				return Json(new BasicJsonMessage { Message = Resources.ForumNoView, Result = false });
-			if (!permissionContext.UserCanPost)
-				return Json(new BasicJsonMessage { Message = Resources.ForumNoPost, Result = false });
-			if (_postService.IsNewPostDupeOrInTimeLimit(newPost, user))
-				return Json(new BasicJsonMessage { Message = String.Format(Resources.PostWait, _settingsManager.Current.MinimumSecondsBetweenPosts), Result = false });
-			newPost.FullText = newPost.IsPlainText ? _textParsingService.ForumCodeToHtml(newPost.FullText) : _textParsingService.ClientHtmlToHtml(newPost.FullText);
-			if (String.IsNullOrWhiteSpace(newPost.FullText) || String.IsNullOrWhiteSpace(newPost.Title))
-				return Json(new BasicJsonMessage { Message = Resources.PostEmpty, Result = false });
+				return Forbid();
+			var userProfileUrl = Url.Action("ViewProfile", "Account", new { id = user.UserID });
+			string TopicLinkGenerator(Topic t) => Url.Action("Topic", "Forum", new {id = t.UrlName});
+			string RedirectLinkGenerator(Topic t) => Url.RouteUrl(new {controller = "Forum", action = "Topic", id = t.UrlName});
+			var ip = HttpContext.Connection.RemoteIpAddress.ToString();
 
-			var urlHelper = Url;
-			var userProfileUrl = urlHelper.Action("ViewProfile", "Account", new { id = user.UserID });
-			Func<Topic, string> topicLinkGenerator = t => urlHelper.Action("Topic", "Forum", new { id = t.UrlName });
-			var topic = _postMasterService.PostNewTopic(forum, user, permissionContext, newPost, HttpContext.Connection.RemoteIpAddress.ToString(), userProfileUrl, topicLinkGenerator);
-			_topicViewCountService.SetViewedTopic(topic, HttpContext);
-			return Json(new BasicJsonMessage { Result = true, Redirect = urlHelper.RouteUrl(new { controller = "Forum", action = "Topic", id = topic.UrlName }) });
+			var result = await _postMasterService.PostNewTopic(user, newPost, ip, userProfileUrl, TopicLinkGenerator, RedirectLinkGenerator);
+
+			if (result.IsSuccessful)
+				return Json(new BasicJsonMessage {Result = true, Redirect = result.Redirect});
+			return Json(new BasicJsonMessage {Result = false, Message = result.Message});
 		}
 
-		private Forum GetForumByIdWithPermissionContext(int forumID, User user, out ForumPermissionContext permissionContext)
+		private async Task<Tuple<Forum, ForumPermissionContext>> GetForumByIdWithPermissionContext(int forumID, User user)
 		{
-			var forum = _forumService.Get(forumID);
+			var forum = await _forumService.Get(forumID);
 			if (forum == null)
 				throw new Exception($"Forum {forumID} not found");
-			permissionContext = _forumPermissionService.GetPermissionContext(forum, user);
-			return forum;
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user);
+			return Tuple.Create(forum, permissionContext);
 		}
 
-		private ForumPermissionContext GetPermissionContextByTopicID(int topicID, out Topic topic)
+		private async Task<Tuple<ForumPermissionContext, Topic>> GetPermissionContextByTopicID(int topicID)
 		{
-			topic = _topicService.Get(topicID);
+			var topic = await _topicService.Get(topicID);
 			if (topic == null)
-				throw new Exception(String.Format("Topic {0} not found", topicID));
-			var forum = _forumService.Get(topic.ForumID);
+				throw new Exception($"Topic {topicID} not found");
+			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
-				throw new Exception(String.Format("Forum {0} not found", topic.ForumID));
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			return _forumPermissionService.GetPermissionContext(forum, user);
+				throw new Exception($"Forum {topic.ForumID} not found");
+			var user = _userRetrievalShim.GetUser();
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user);
+			return Tuple.Create(permissionContext, topic);
 		}
 
-		public ActionResult TopicID(int id)
+		public async Task<ActionResult> TopicID(int id)
 		{
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return NotFound();
 			return RedirectToActionPermanent("Topic", new { id = topic.UrlName });
 		}
 
-		public async Task<ActionResult> Topic(string id, int page = 1)
+		public async Task<ActionResult> Topic(string id, int pageNumber = 1)
 		{
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return NotFound();
-			var forum = _forumService.Get(topic.ForumID);
+			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
-				throw new Exception(String.Format("TopicID {0} references ForumID {1}, which does not exist.", topic.TopicID, topic.ForumID));
+				throw new Exception($"TopicID {topic.TopicID} references ForumID {topic.ForumID}, which does not exist.");
 
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			var adapter = new ForumAdapterFactory(forum);
-			var permissionContext = _forumPermissionService.GetPermissionContext(forum, user, topic);
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user, topic);
 			if (!permissionContext.UserCanView)
 			{
 				return NotFound();
@@ -176,16 +166,16 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			DateTime? lastReadTime = DateTime.UtcNow;
 			if (user != null)
 			{
-				lastReadTime = _lastReadService.GetLastReadTime(user, topic);
-				isFavorite = _favoriteTopicService.IsTopicFavorite(user, topic);
-				isSubscribed = _subService.IsTopicSubscribed(user, topic);
+				lastReadTime = await _lastReadService.GetLastReadTime(user, topic);
+				isFavorite = await _favoriteTopicService.IsTopicFavorite(user, topic);
+				isSubscribed = await _subService.IsTopicSubscribed(user, topic);
 				if (isSubscribed)
-					_subService.MarkSubscribedTopicViewed(user, topic);
+					await _subService.MarkSubscribedTopicViewed(user, topic);
 				if (!adapter.IsAdapterEnabled || (adapter.IsAdapterEnabled && adapter.ForumAdapter.MarkViewedTopicRead))
-					_lastReadService.MarkTopicRead(user, topic);
+					await _lastReadService.MarkTopicRead(user, topic);
 				if (user.IsInRole(PermanentRoles.Moderator))
 				{
-					var categorizedForums = _forumService.GetCategorizedForumContainer();
+					var categorizedForums = await _forumService.GetCategorizedForumContainer();
 					var categorizedForumSelectList = new List<SelectListItem>();
 					foreach (var uncategorizedForum in categorizedForums.UncategorizedForums)
 						categorizedForumSelectList.Add(new SelectListItem { Value = uncategorizedForum.ForumID.ToString(), Text = uncategorizedForum.Title, Selected = forum.ForumID == uncategorizedForum.ForumID});
@@ -200,21 +190,21 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			}
 			List<Post> posts;
 			if (forum.IsQAForum)
-				posts = _postService.GetPosts(topic, permissionContext.UserCanModerate);
+				posts = await _postService.GetPosts(topic, permissionContext.UserCanModerate);
 			else
-				posts = _postService.GetPosts(topic, permissionContext.UserCanModerate, page, out pagerContext);
+				(posts, pagerContext) = await _postService.GetPosts(topic, permissionContext.UserCanModerate, pageNumber);
 			if (posts.Count == 0)
 				return NotFound();
-			var signatures = _profileService.GetSignatures(posts);
-			var avatars = _profileService.GetAvatars(posts);
-			var votedIDs = _postService.GetVotedPostIDs(user, posts);
+			var signatures = await _profileService.GetSignatures(posts);
+			var avatars = await _profileService.GetAvatars(posts);
+			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
 			var container = ComposeTopicContainer(topic, forum, permissionContext, isSubscribed, posts, pagerContext, isFavorite, signatures, avatars, votedIDs, lastReadTime);
-			_topicViewCountService.ProcessView(topic, HttpContext);
+			await _topicViewCountService.ProcessView(topic);
 			await _topicViewLogService.LogView(user?.UserID, topic.TopicID);
 			if (adapter.IsAdapterEnabled)
 			{
 				adapter.ForumAdapter.AdaptTopic(this, container);
-				if (String.IsNullOrWhiteSpace(adapter.ForumAdapter.ViewName))
+				if (string.IsNullOrWhiteSpace(adapter.ForumAdapter.ViewName))
 					return View(adapter.ForumAdapter.Model);
 				return View(adapter.ForumAdapter.ViewName, adapter.ForumAdapter.Model);
 			}
@@ -226,17 +216,17 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View(container);
 		}
 
-		public ActionResult TopicPage(int id, int page, int low, int high)
+		public async Task<ActionResult> TopicPage(int id, int pageNumber, int low, int high)
 		{
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return NotFound();
-			var forum = _forumService.Get(topic.ForumID);
+			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
-				throw new Exception(String.Format("TopicID {0} references ForumID {1}, which does not exist.", topic.TopicID, topic.ForumID));
-			var user = _userRetrievalShim.GetUser(HttpContext);
+				throw new Exception($"TopicID {topic.TopicID} references ForumID {topic.ForumID}, which does not exist.");
+			var user = _userRetrievalShim.GetUser();
 
-			var permissionContext = _forumPermissionService.GetPermissionContext(forum, user, topic);
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user, topic);
 			if (!permissionContext.UserCanView)
 			{
 				return StatusCode(403);
@@ -245,37 +235,36 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			DateTime? lastReadTime = DateTime.UtcNow;
 			if (user != null)
 			{
-				lastReadTime = _lastReadService.GetLastReadTime(user, topic);
+				lastReadTime = await _lastReadService.GetLastReadTime(user, topic);
 			}
 
-			PagerContext pagerContext;
-			var posts = _postService.GetPosts(topic, permissionContext.UserCanModerate, page, out pagerContext);
+			var (posts, pagerContext) = await _postService.GetPosts(topic, permissionContext.UserCanModerate, pageNumber);
 			if (posts.Count == 0)
 				return NotFound();
-			var signatures = _profileService.GetSignatures(posts);
-			var avatars = _profileService.GetAvatars(posts);
-			var votedIDs = _postService.GetVotedPostIDs(user, posts);
+			var signatures = await _profileService.GetSignatures(posts);
+			var avatars = await _profileService.GetAvatars(posts);
+			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
 			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime);
-			_topicViewCountService.ProcessView(topic, HttpContext);
+			await _topicViewCountService.ProcessView(topic);
 			ViewBag.Low = low;
 			ViewBag.High = high;
 			return View(container);
 		}
 
-		public ActionResult PostReply(int id, int quotePostID = 0, int replyID = 0)
+		public async Task<ActionResult> PostReply(int id, int quotePostID = 0, int replyID = 0)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return Content(Resources.LoginToPost);
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return Content(Resources.TopicNotExist);
-			var forum = _forumService.Get(topic.ForumID);
+			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
 				throw new Exception(String.Format("TopicID {0} references ForumID {1}, which does not exist.", topic.TopicID, topic.ForumID));
 			if (topic.IsClosed)
 				return Content(Resources.Closed);
-			var permissionContext = _forumPermissionService.GetPermissionContext(forum, user, topic);
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user, topic);
 			if (!permissionContext.UserCanView)
 				return Content(Resources.ForumNoView);
 			if (!permissionContext.UserCanPost)
@@ -284,13 +273,13 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var title = topic.Title;
 			if (!title.ToLower().StartsWith("re:"))
 				title = "Re: " + title;
-			var profile = _profileService.GetProfile(user);
+			var profile = await _profileService.GetProfile(user);
 			var newPost = new NewPost { ItemID = topic.TopicID, Title = title, IncludeSignature = profile.Signature.Length > 0, IsPlainText = profile.IsPlainText, IsImageEnabled = _settingsManager.Current.AllowImages, ParentPostID = replyID };
 
 			if (quotePostID != 0)
 			{
-				var post = _postService.Get(quotePostID);
-				newPost.FullText = _postService.GetPostForQuote(post, user, profile.IsPlainText);
+				var post = await _postService.Get(quotePostID);
+				newPost.FullText = await _postService.GetPostForQuote(post, user, profile.IsPlainText);
 			}
 
 			if (forum.IsQAForum)
@@ -307,118 +296,87 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		}
 
 		[HttpPost]
-		// TODO: test validation [ValidateInput(false)]
-		public JsonResult PostReply(NewPost newPost)
+		public async Task<JsonResult> PostReply(NewPost newPost)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			if (user == null)
-				return Json(new BasicJsonMessage { Message = Resources.LoginToPost, Result = false });
-			ForumPermissionContext permissionContext;
-			var topic = _topicService.Get(newPost.ItemID);
-			if (topic == null)
-				return Json(new BasicJsonMessage { Message = Resources.TopicNotExist, Result = false });
-			if (topic.IsClosed)
-				return Json(new BasicJsonMessage { Message = Resources.Closed, Result = false });
-			GetForumByIdWithPermissionContext(topic.ForumID, user, out permissionContext);
-			if (!permissionContext.UserCanView)
-				return Json(new BasicJsonMessage { Message = Resources.ForumNoView, Result = false });
-			if (!permissionContext.UserCanPost)
-				return Json(new BasicJsonMessage { Message = Resources.ForumNoPost, Result = false });
-			if (_postService.IsNewPostDupeOrInTimeLimit(newPost, user))
-				return Json(new BasicJsonMessage { Message = String.Format(Resources.PostWait, _settingsManager.Current.MinimumSecondsBetweenPosts), Result = false });
-			newPost.FullText = newPost.IsPlainText ? _textParsingService.ForumCodeToHtml(newPost.FullText) : _textParsingService.ClientHtmlToHtml(newPost.FullText);
-			if (String.IsNullOrEmpty(newPost.FullText))
-				return Json(new BasicJsonMessage { Message = Resources.PostEmpty, Result = false });
-			if (newPost.ParentPostID != 0)
-			{
-				var parentPost = _postService.Get(newPost.ParentPostID);
-				if (parentPost == null || parentPost.TopicID != topic.TopicID)
-					return Json(new BasicJsonMessage { Message = "This reply attempt is being made to a post in another topic", Result = false });
-			}
-			
-			var topicLink = this.FullUrlHelper("GoToNewestPost", Name, new { id = topic.TopicID });
-			Func<User, string> unsubscribeLinkGenerator =
-				u => this.FullUrlHelper("Unsubscribe", SubscriptionController.Name, new { topicID = topic.TopicID, authKey = u.AuthorizationKey });
-			var helper = Url;
-			var userProfileUrl = helper.Action("ViewProfile", "Account", new { id = user.UserID });
-			Func<Post, string> postLinkGenerator = p => helper.Action("PostLink", "Forum", new { id = p.PostID });
-			var post = _postMasterService.PostReply(topic, user, newPost.ParentPostID, HttpContext.Connection.RemoteIpAddress.ToString(), false, newPost, DateTime.UtcNow, topicLink, unsubscribeLinkGenerator, userProfileUrl, postLinkGenerator);
-			_topicViewCountService.SetViewedTopic(topic, HttpContext);
-			if (newPost.CloseOnReply && user.IsInRole(PermanentRoles.Moderator))
-				_topicService.CloseTopic(topic, user);
-			var urlHelper = Url;
-			return Json(new BasicJsonMessage { Result = true, Redirect = urlHelper.RouteUrl(new { controller = "Forum", action = "PostLink", id = post.PostID }) });
+			var user = _userRetrievalShim.GetUser();
+			var userProfileUrl = Url.Action("ViewProfile", "Account", new { id = user.UserID });
+			string TopicLinkGenerator(Topic t) => this.FullUrlHelper("GoToNewestPost", Name, new { id = t.TopicID });
+			string UnsubscribeLinkGenerator(User u, Topic t) => this.FullUrlHelper("Unsubscribe", SubscriptionController.Name, new {topicID = t.TopicID, userID = user.UserID, hash = _profileService.GetUnsubscribeHash(user)});
+			string PostLinkGenerator(Post p) => Url.Action("PostLink", "Forum", new {id = p.PostID});
+			string RedirectLinkGenerator(Post p) => Url.RouteUrl(new {controller = "Forum", action = "PostLink", id = p.PostID});
+			var ip = HttpContext.Connection.RemoteIpAddress.ToString();
+
+			var result = await _postMasterService.PostReply(user, newPost.ParentPostID, ip, false, newPost, DateTime.UtcNow, TopicLinkGenerator, UnsubscribeLinkGenerator, userProfileUrl, PostLinkGenerator, RedirectLinkGenerator);
+
+			return Json(new BasicJsonMessage { Result = result.IsSuccessful, Redirect = result.Redirect, Message = result.Message });
 		}
 
-		public ActionResult Post(int id)
+		public async Task<ActionResult> Post(int id)
 		{
-			var post = _postService.Get(id);
+			var post = await _postService.Get(id);
 			if (post == null)
 				return NotFound();
-			Topic topic;
-			var permissionContext = GetPermissionContextByTopicID(post.TopicID, out topic);
+			var (permissionContext, topic) = await GetPermissionContextByTopicID(post.TopicID);
 			if (!permissionContext.UserCanView)
 				return StatusCode(403);
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			var postList = new List<Post> { post };
-			var signatures = _profileService.GetSignatures(postList);
-			var avatars = _profileService.GetAvatars(postList);
-			var votedPostIDs = _postService.GetVotedPostIDs(user, postList);
+			var signatures = await _profileService.GetSignatures(postList);
+			var avatars = await _profileService.GetAvatars(postList);
+			var votedPostIDs = await _postService.GetVotedPostIDs(user, postList);
 			ViewData["PopForums.Identity.CurrentUser"] = user; // TODO: what is this used for?
 			if (user != null)
-				_lastReadService.MarkTopicRead(user, topic);
+				await _lastReadService.MarkTopicRead(user, topic);
 			return View("PostItem", new PostItemContainer { Post = post, Avatars = avatars, Signatures = signatures, VotedPostIDs = votedPostIDs, Topic = topic, User = user });
 		}
 		
-		public ViewResult Recent(int page = 1)
+		public async Task<ViewResult> Recent(int pageNumber = 1)
 		{
 			var includeDeleted = false;
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user != null && user.IsInRole(PermanentRoles.Moderator))
 				includeDeleted = true;
 			var titles = _forumService.GetAllForumTitles();
-			PagerContext pagerContext;
-			var topics = _forumService.GetRecentTopics(user, includeDeleted, page, out pagerContext);
+			var (topics, pagerContext) = await _forumService.GetRecentTopics(user, includeDeleted, pageNumber);
 			var container = new PagedTopicContainer { ForumTitles = titles, PagerContext = pagerContext, Topics = topics };
-			_lastReadService.GetTopicReadStatus(user, container);
+			await _lastReadService.GetTopicReadStatus(user, container);
 			return View(container);
 		}
 
 		[HttpPost]
-		public RedirectToActionResult MarkForumRead(int id)
+		public async Task<RedirectToActionResult> MarkForumRead(int id)
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				throw new Exception("There is no logged in user. Can't mark forum read.");
-			var forum = _forumService.Get(id);
+			var forum = await _forumService.Get(id);
 			if (forum == null)
-				throw new Exception(String.Format("There is no ForumID {0} to mark as read.", id));
-			_lastReadService.MarkForumRead(user, forum);
+				throw new Exception($"There is no ForumID {id} to mark as read.");
+			await _lastReadService.MarkForumRead(user, forum);
 			return RedirectToAction("Index", HomeController.Name);
 		}
 
 		[HttpPost]
-		public RedirectToActionResult MarkAllForumsRead()
+		public async Task<RedirectToActionResult> MarkAllForumsRead()
 		{
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				throw new Exception("There is no logged in user. Can't mark forum read.");
-			_lastReadService.MarkAllForumsRead(user);
+			await _lastReadService.MarkAllForumsRead(user);
 			return RedirectToAction("Index", HomeController.Name);
 		}
 
-		public ActionResult PostLink(int id)
+		public async Task<ActionResult> PostLink(int id)
 		{
 			var includeDeleted = false;
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user != null && user.IsInRole(PermanentRoles.Moderator))
 				includeDeleted = true;
-			var post = _postService.Get(id);
+			var post = await _postService.Get(id);
 			if (post == null || (post.IsDeleted && (user == null || !user.IsInRole(PermanentRoles.Moderator))))
 				return NotFound();
-			Topic topic;
-			var page = _postService.GetTopicPageForPost(post, includeDeleted, out topic);
-			var forum = _forumService.Get(topic.ForumID);
+			var (pageNumber, topic) = await _postService.GetTopicPageForPost(post, includeDeleted);
+			var forum = await _forumService.Get(topic.ForumID);
 			var adapter = new ForumAdapterFactory(forum);
 			if (adapter.IsAdapterEnabled)
 			{
@@ -426,85 +384,86 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				if (result != null)
 					return result;
 			}
-			var url = Url.Action("Topic", new { id = topic.UrlName, page }) + "#" + post.PostID;
+			var url = Url.Action("Topic", new { id = topic.UrlName, pageNumber }) + "#" + post.PostID;
 			return Redirect(url);
 		}
 
-		public ActionResult GoToNewestPost(int id)
+		public async Task<ActionResult> GoToNewestPost(int id)
 		{
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return NotFound();
 			var includeDeleted = false;
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user != null && user.IsInRole(PermanentRoles.Moderator))
 				includeDeleted = true;
 			if (user == null)
 				return RedirectToAction("Topic", new { id = topic.UrlName });
-			var post = _lastReadService.GetFirstUnreadPost(user, topic);
-			var page = _postService.GetTopicPageForPost(post, includeDeleted, out topic);
-			var url = Url.Action("Topic", new { id = topic.UrlName, page }) + "#" + post.PostID;
+			var post = await _lastReadService.GetFirstUnreadPost(user, topic);
+			var (pageNumber, t) = await _postService.GetTopicPageForPost(post, includeDeleted);
+			var url = Url.Action("Topic", new { id = topic.UrlName, pageNumber }) + "#" + post.PostID;
 			return Redirect(url);
 		}
 
-		public ActionResult Edit(int id)
+		public async Task<ActionResult> Edit(int id)
 		{
-			var post = _postService.Get(id);
+			var post = await _postService.Get(id);
 			if (post == null)
 				return NotFound();
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (!user.IsPostEditable(post))
 				return StatusCode(403);
-			var postEdit = _postService.GetPostForEdit(post, user);
+			var postEdit = await _postService.GetPostForEdit(post, user);
 			return View(postEdit);
 		}
 
 		[HttpPost]
-		public ActionResult Edit(int id, PostEdit postEdit)
+		public async Task<ActionResult> Edit(int id, PostEdit postEdit)
 		{
-			var post = _postService.Get(id);
-			var user = _userRetrievalShim.GetUser(HttpContext);
-			if (!user.IsPostEditable(post))
-				return StatusCode(403);
-			_postMasterService.EditPost(post, postEdit, user);
-			return RedirectToAction("PostLink", new { id = post.PostID });
+			var user = _userRetrievalShim.GetUser();
+			string RedirectLinkGenerator(Post p) => Url.RouteUrl(new { controller = "Forum", action = "PostLink", id = p.PostID });
+			var result = await _postMasterService.EditPost(id, postEdit, user, RedirectLinkGenerator);
+			if (result.IsSuccessful)
+				return Redirect(result.Redirect);
+			ViewBag.Message = result.Message;
+			return View(postEdit);
 		}
 
 		[HttpPost]
-		public ActionResult DeletePost(int id)
+		public async Task<ActionResult> DeletePost(int id)
 		{
-			var post = _postService.Get(id);
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var post = await _postService.Get(id);
+			var user = _userRetrievalShim.GetUser();
 			if (!user.IsPostEditable(post))
 				return StatusCode(403);
-			_postService.Delete(post, user);
+			await _postService.Delete(post, user);
 			if (post.IsFirstInTopic || !user.IsInRole(PermanentRoles.Moderator))
 			{
-				var topic = _topicService.Get(post.TopicID);
-				var forum = _forumService.Get(topic.ForumID);
+				var topic = await _topicService.Get(post.TopicID);
+				var forum = await _forumService.Get(topic.ForumID);
 				return RedirectToAction("Index", "Forum", new { urlName = forum.UrlName });
 			}
 			return RedirectToAction("PostLink", "Forum", new { id = post.PostID });
 		}
 
-		public ContentResult IsLastPostInTopic(int id, int lastPostID)
+		public async Task<ContentResult> IsLastPostInTopic(int id, int lastPostID)
 		{
-			var last = _postService.GetLastPostID(id);
+			var last = await _postService.GetLastPostID(id);
 			var result = last == lastPostID;
 			return Content(result.ToString());
 		}
 
-		public ActionResult TopicPartial(int id, int lastPost, int lowPage)
+		public async Task<ActionResult> TopicPartial(int id, int lastPost, int lowPage)
 		{
-			var topic = _topicService.Get(id);
+			var topic = await _topicService.Get(id);
 			if (topic == null)
 				return NotFound();
-			var forum = _forumService.Get(topic.ForumID);
+			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
-				throw new Exception(String.Format("TopicID {0} references ForumID {1}, which does not exist.", topic.TopicID, topic.ForumID));
-			var user = _userRetrievalShim.GetUser(HttpContext);
+				throw new Exception($"TopicID {topic.TopicID} references ForumID {topic.ForumID}, which does not exist.");
+			var user = _userRetrievalShim.GetUser();
 
-			var permissionContext = _forumPermissionService.GetPermissionContext(forum, user, topic);
+			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user, topic);
 			if (!permissionContext.UserCanView)
 			{
 				return StatusCode(403);
@@ -513,46 +472,45 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			DateTime? lastReadTime = DateTime.UtcNow;
 			if (user != null)
 			{
-				lastReadTime = _lastReadService.GetLastReadTime(user, topic);
+				lastReadTime = await _lastReadService.GetLastReadTime(user, topic);
 			}
 
-			PagerContext pagerContext;
-			var posts = _postService.GetPosts(topic, lastPost, permissionContext.UserCanModerate, out pagerContext);
-			var signatures = _profileService.GetSignatures(posts);
-			var avatars = _profileService.GetAvatars(posts);
-			var votedIDs = _postService.GetVotedPostIDs(user, posts);
+			var (posts, pagerContext) = await _postService.GetPosts(topic, lastPost, permissionContext.UserCanModerate);
+			var signatures = await _profileService.GetSignatures(posts);
+			var avatars = await _profileService.GetAvatars(posts);
+			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
 			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime);
 			ViewBag.Low = lowPage;
 			ViewBag.High = pagerContext.PageCount;
 			return View("TopicPage", container);
 		}
 
-		public ActionResult Voters(int id)
+		public async Task<ActionResult> Voters(int id)
 		{
-			var post = _postService.Get(id);
+			var post = await _postService.Get(id);
 			if (post == null)
 				return NotFound();
-			var voters = _postService.GetVoters(post);
+			var voters = await _postService.GetVoters(post);
 			return View(voters);
 		}
 
 		[HttpPost]
-		public ActionResult VotePost(int id)
+		public async Task<ActionResult> VotePost(int id)
 		{
-			var post = _postService.Get(id);
+			var post = await _postService.Get(id);
 			if (post == null)
 				return NotFound();
-			var topic = _topicService.Get(post.TopicID);
+			var topic = await _topicService.Get(post.TopicID);
 			if (topic == null)
-				throw new Exception(String.Format("Post {0} appears to be orphaned from a topic.", post.PostID));
-			var user = _userRetrievalShim.GetUser(HttpContext);
+				throw new Exception($"Post {post.PostID} appears to be orphaned from a topic.");
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return StatusCode(403);
 			var helper = Url;
 			var userProfileUrl = helper.Action("ViewProfile", "Account", new { id = user.UserID });
 			var topicUrl = helper.Action("PostLink", "Forum", new { id = post.PostID });
-			_postService.VotePost(post, user, userProfileUrl, topicUrl, topic.Title);
-			var count = _postService.GetVoteCount(post);
+			await _postService.VotePost(post, user, userProfileUrl, topicUrl, topic.Title);
+			var count = await _postService.GetVoteCount(post);
 			return View("Votes", count);
 		}
 
@@ -570,15 +528,15 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		}
 
 		[HttpPost]
-		public ActionResult SetAnswer(int topicID, int postID)
+		public async Task<ActionResult> SetAnswer(int topicID, int postID)
 		{
-			var post = _postService.Get(postID);
+			var post = await _postService.Get(postID);
 			if (post == null)
 				return NotFound();
-			var topic = _topicService.Get(topicID);
+			var topic = await _topicService.Get(topicID);
 			if (topic == null)
 				return NotFound();
-			var user = _userRetrievalShim.GetUser(HttpContext);
+			var user = _userRetrievalShim.GetUser();
 			if (user == null)
 				return StatusCode(403);
 			try
@@ -586,7 +544,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				var helper = Url;
 				var userProfileUrl = helper.Action("ViewProfile", "Account", new { id = user.UserID });
 				var topicUrl = helper.Action("PostLink", "Forum", new { id = post.PostID });
-				_topicService.SetAnswer(user, topic, post, userProfileUrl, topicUrl);
+				await _topicService.SetAnswer(user, topic, post, userProfileUrl, topicUrl);
 			}
 			catch (SecurityException) // TODO: what is this?
 			{

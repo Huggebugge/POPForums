@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Dapper;
 using PopForums.Configuration;
 using PopForums.Models;
@@ -26,165 +27,198 @@ namespace PopForums.Sql.Repositories
 			public const string PointTotals = "PopForums.Users.Points.";
 		}
 
-		public const string PopForumsUserColumns = "pf_PopForumsUser.UserID, pf_PopForumsUser.Name, pf_PopForumsUser.Email, pf_PopForumsUser.CreationDate, pf_PopForumsUser.IsApproved, pf_PopForumsUser.LastActivityDate, pf_PopForumsUser.LastLoginDate, pf_PopForumsUser.AuthorizationKey";
+		public const string PopForumsUserColumns = "pf_PopForumsUser.UserID, pf_PopForumsUser.Name, pf_PopForumsUser.Email, pf_PopForumsUser.CreationDate, pf_PopForumsUser.IsApproved, pf_PopForumsUser.AuthorizationKey";
 
-		public void SetHashedPassword(User user, string hashedPassword, Guid salt)
+		private void CacheUser(User user)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				connection.Execute("UPDATE pf_PopForumsUser SET Password = @Password, Salt = @Salt WHERE UserID = @UserID", new { Password = hashedPassword, Salt = salt, user.UserID }));
+			// We only cache users by name because it's the only consistent and repetitive get, looked up via the identity principal.
+			var key = "PopForums.User." + user.Name;
+			_cacheHelper.SetCacheObject(key, user);
 		}
 
-		public string GetHashedPasswordByEmail(string email, out Guid? salt)
+		private void RemoveCacheUser(string name)
+		{
+			var key = "PopForums.User." + name;
+			_cacheHelper.RemoveCacheObject(key);
+		}
+
+		private User GetCachedUserByName(string name)
+		{
+			var key = "PopForums.User." + name;
+			return _cacheHelper.GetCacheObject<User>(key);
+		}
+
+		public async Task SetHashedPassword(User user, string hashedPassword, Guid salt)
+		{
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				connection.ExecuteAsync("UPDATE pf_PopForumsUser SET Password = @Password, Salt = @Salt WHERE UserID = @UserID", new { Password = hashedPassword, Salt = salt, user.UserID }));
+		}
+
+		public async Task<Tuple<string, Guid?>> GetHashedPasswordByEmail(string email)
 		{
 			string hashedPassword = null;
 			Guid? saltCheck = null;
-			_sqlObjectFactory.GetConnection().Using(connection =>
+			await _sqlObjectFactory.GetConnection().UsingAsync(async connection =>
 			{
-				var reader = connection.ExecuteReader("SELECT Password, Salt FROM pf_PopForumsUser WHERE Email = @Email", new {Email = email});
+				var reader = await connection.ExecuteReaderAsync("SELECT Password, Salt FROM pf_PopForumsUser WHERE Email = @Email", new {Email = email});
 				if (reader.Read())
 				{
 			         hashedPassword = reader.GetString(0);
 					 saltCheck = reader.NullGuidDbHelper(1);
 				}
 			});
-			salt = saltCheck;
-			return hashedPassword;
+			return Tuple.Create(hashedPassword, saltCheck);
 		}
 
-		public List<User> GetUsersFromIDs(IList<int> ids)
+		public async Task<List<User>> GetUsersFromIDs(IList<int> ids)
 		{
-			List<User> list = null;
+			Task<IEnumerable<User>> list = null;
 			if (!ids.Any())
 				return new List<User>();
 			var sql = "SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE UserID IN (" + ids[0];
 			foreach (var id in ids.Skip(1))
 				sql += ", " + id;
 			sql += ")";
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				list = connection.Query<User>(sql).ToList());
-			return list;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				list = connection.QueryAsync<User>(sql));
+			return list.Result.ToList();
 		}
 
-		public int GetTotalUsers()
+		public async Task<int> GetTotalUsers()
 		{
 			var cacheObject = _cacheHelper.GetCacheObject<int?>(CacheKeys.TotalUsers);
 			if (cacheObject.HasValue)
 				return cacheObject.Value;
-			var count = 0;
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				count = connection.ExecuteScalar<int>("SELECT COUNT(UserID) FROM pf_PopForumsUser"));
-			_cacheHelper.SetCacheObject(CacheKeys.TotalUsers, count);
-			return count;
+			Task<int> count = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				count = connection.ExecuteScalarAsync<int>("SELECT COUNT(UserID) FROM pf_PopForumsUser"));
+			_cacheHelper.SetCacheObject(CacheKeys.TotalUsers, count.Result);
+			return await count;
 		}
 
-		private User GetUser(string sql, object parameters)
+		private async Task<User> GetUser(string sql, object parameters)
 		{
-			User user = null;
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				user = connection.QuerySingleOrDefault<User>(sql, parameters));
+			Task<User> user = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				user = connection.QuerySingleOrDefaultAsync<User>(sql, parameters));
+			return await user;
+		}
+
+		public async Task<User> GetUser(int userID)
+		{
+			return await GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE UserID = @UserID", new { UserID = userID });
+		}
+
+		public async Task<User> GetUserByName(string name)
+		{
+			var cachedUser = GetCachedUserByName(name);
+			if (cachedUser != null)
+				return cachedUser;
+			var user = await GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Name = @Name", new { Name = name });
+			if (user == null)
+				return null;
+			CacheUser(user);
 			return user;
 		}
 
-		public User GetUser(int userID)
+		public async Task<User> GetUserByEmail(string email)
 		{
-			return GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE UserID = @UserID", new { UserID = userID });
+			return await GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Email = @Email", new { Email = email });
 		}
 
-		public User GetUserByName(string name)
+		public async Task<User> GetUserByAuthorizationKey(Guid key)
 		{
-			return GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Name = @Name", new { Name = name });
+			return await GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE AuthorizationKey = @AuthorizationKey", new { AuthorizationKey = key });
 		}
 
-		public User GetUserByEmail(string email)
+		public virtual async Task<User> CreateUser(string name, string email, DateTime creationDate, bool isApproved, string hashedPassword, Guid authorizationKey, Guid salt)
 		{
-			return GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Email = @Email", new { Email = email });
+			Task<int> userID = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				userID = connection.QuerySingleAsync<int>("INSERT INTO pf_PopForumsUser (Name, Email, CreationDate, IsApproved, AuthorizationKey, Password, Salt) VALUES (@Name, @Email, @CreationDate, @IsApproved, @AuthorizationKey, @Password, @Salt);SELECT CAST(SCOPE_IDENTITY() as int)", new { Name = name, Email = email, CreationDate = creationDate, IsApproved = isApproved, AuthorizationKey = authorizationKey, Password = hashedPassword, Salt = salt }));
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				connection.ExecuteAsync("INSERT INTO pf_UserActivity (UserID, LastActivityDate, LastLoginDate) VALUES (@UserID, @LastActivityDate, @LastLoginDate)", new {UserID = userID.Result, LastActivityDate = creationDate, LastLoginDate = creationDate}));
+			return new User {UserID = await userID, Name = name, Email = email, CreationDate = creationDate, IsApproved = isApproved, AuthorizationKey = authorizationKey};
 		}
 
-		public User GetUserByAuthorizationKey(Guid key)
+		public async Task UpdateLastActivityDate(User user, DateTime newDate)
 		{
-			return GetUser("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE AuthorizationKey = @AuthorizationKey", new { AuthorizationKey = key });
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				connection.ExecuteAsync("UPDATE pf_UserActivity SET LastActivityDate = @LastActivityDate WHERE UserID = @UserID", new { LastActivityDate = newDate, user.UserID }));
 		}
 
-		public virtual User CreateUser(string name, string email, DateTime creationDate, bool isApproved, string hashedPassword, Guid authorizationKey, Guid salt)
+		public async Task UpdateLastLoginDate(User user, DateTime newDate)
 		{
-			var userID = 0;
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				userID = connection.QuerySingle<int>("INSERT INTO pf_PopForumsUser (Name, Email, CreationDate, IsApproved, LastActivityDate, LastLoginDate, AuthorizationKey, Password, Salt) VALUES (@Name, @Email, @CreationDate, @IsApproved, @LastActivityDate, @LastLoginDate, @AuthorizationKey, @Password, @Salt);SELECT CAST(SCOPE_IDENTITY() as int)", new { Name = name, Email = email, CreationDate = creationDate, IsApproved = isApproved, LastActivityDate = creationDate, LastLoginDate = creationDate, AuthorizationKey = authorizationKey, Password = hashedPassword, Salt = salt }));
-			return new User {UserID = userID, Name = name, Email = email, CreationDate = creationDate, IsApproved = isApproved, LastActivityDate = creationDate, LastLoginDate = creationDate, AuthorizationKey = authorizationKey};
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				connection.ExecuteAsync("UPDATE pf_UserActivity SET LastLoginDate = @LastLoginDate WHERE UserID = @UserID", new { LastLoginDate = newDate, user.UserID }));
 		}
 
-		public void UpdateLastActivityDate(User user, DateTime newDate)
+		public async Task ChangeName(User user, string newName)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				connection.Execute("UPDATE pf_PopForumsUser SET LastActivityDate = @LastActivityDate WHERE UserID = @UserID", new { LastActivityDate = newDate, user.UserID }));
+			var oldName = user.Name;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				connection.ExecuteAsync("UPDATE pf_PopForumsUser SET Name = @Name WHERE UserID = @UserID", new { Name = newName, user.UserID }));
+			RemoveCacheUser(oldName);
 		}
 
-		public void UpdateLastLoginDate(User user, DateTime newDate)
+		public async Task ChangeEmail(User user, string newEmail)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				connection.Execute("UPDATE pf_PopForumsUser SET LastLoginDate = @LastLoginDate WHERE UserID = @UserID", new { LastLoginDate = newDate, user.UserID }));
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection => 
+				connection.ExecuteAsync("UPDATE pf_PopForumsUser SET Email = @Email WHERE UserID = @UserID", new { Email = newEmail, user.UserID }));
+			RemoveCacheUser(user.Name);
 		}
 
-		public void ChangeName(User user, string newName)
+		public async Task UpdateIsApproved(User user, bool isApproved)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				connection.Execute("UPDATE pf_PopForumsUser SET Name = @Name WHERE UserID = @UserID", new { Name = newName, user.UserID }));
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				connection.ExecuteAsync("UPDATE pf_PopForumsUser SET IsApproved = @IsApproved WHERE UserID = @UserID", new { IsApproved = isApproved, user.UserID }));
+			RemoveCacheUser(user.Name);
 		}
 
-		public void ChangeEmail(User user, string newEmail)
+		public async Task UpdateAuthorizationKey(User user, Guid key)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection => 
-				connection.Execute("UPDATE pf_PopForumsUser SET Email = @Email WHERE UserID = @UserID", new { Email = newEmail, user.UserID }));
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				connection.ExecuteAsync("UPDATE pf_PopForumsUser SET AuthorizationKey = @AuthorizationKey WHERE UserID = @UserID", new { AuthorizationKey = key, user.UserID }));
+			RemoveCacheUser(user.Name);
 		}
 
-		public void UpdateIsApproved(User user, bool isApproved)
+		public async Task<List<User>> SearchByEmail(string email)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				connection.Execute("UPDATE pf_PopForumsUser SET IsApproved = @IsApproved WHERE UserID = @UserID", new { IsApproved = isApproved, user.UserID }));
-		}
-
-		public void UpdateAuthorizationKey(User user, Guid key)
-		{
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				connection.Execute("UPDATE pf_PopForumsUser SET AuthorizationKey = @AuthorizationKey WHERE UserID = @UserID", new { AuthorizationKey = key, user.UserID }));
-		}
-
-		public List<User> SearchByEmail(string email)
-		{
-			var list = GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Email LIKE '%' + @Email + '%'", new { Email = email });
+			var list = await GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Email LIKE '%' + @Email + '%'", new { Email = email });
 			return list;
 		}
 
-		public List<User> SearchByName(string name)
+		public async Task<List<User>> SearchByName(string name)
 		{
-			var list = GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Name LIKE '%' + @Name + '%'", new { Name = name });
+			var list = await GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser WHERE Name LIKE '%' + @Name + '%'", new { Name = name });
 			return list;
 		}
 
-		public List<User> SearchByRole(string role)
+		public async Task<List<User>> SearchByRole(string role)
 		{
-			var list = GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_PopForumsUserRole R ON pf_PopForumsUser.UserID = R.UserID WHERE Role = @Role", new { Role = role });
+			var list = await GetList("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_PopForumsUserRole R ON pf_PopForumsUser.UserID = R.UserID WHERE Role = @Role", new { Role = role });
 			return list;
 		}
 
-		public List<User> GetUsersOnline()
+		public async Task<List<User>> GetUsersOnline()
 		{
 			var cacheObject = _cacheHelper.GetCacheObject<List<User>>(CacheKeys.UsersOnline);
 			if (cacheObject != null)
 				return cacheObject;
-			List<User> list = null;
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				list = connection.Query<User>("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_UserSession ON pf_PopForumsUser.UserID = pf_UserSession.UserID ORDER BY Name").ToList());
-			_cacheHelper.SetCacheObject(CacheKeys.UsersOnline, list, 60);
-			return list;
+			Task<IEnumerable<User>> list = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				list = connection.QueryAsync<User>("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_UserSession ON pf_PopForumsUser.UserID = pf_UserSession.UserID ORDER BY Name"));
+			var userList = list.Result.ToList();
+			_cacheHelper.SetCacheObject(CacheKeys.UsersOnline, userList, 60);
+			return userList;
 		}
 
-		public List<User> GetSubscribedUsers()
+		public async Task<List<User>> GetSubscribedUsers()
 		{
-			List<User> list = null;
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				list = connection.Query<User>("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_Profile ON pf_PopForumsUser.UserID = pf_Profile.UserID WHERE pf_Profile.IsSubscribed = 1").ToList());
-			return list;
+			Task<IEnumerable<User>> list = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				list = connection.QueryAsync<User>("SELECT " + PopForumsUserColumns + " FROM pf_PopForumsUser JOIN pf_Profile ON pf_PopForumsUser.UserID = pf_Profile.UserID WHERE pf_Profile.IsSubscribed = 1"));
+			return list.Result.ToList();
 		}
 
 		public Dictionary<User, int> GetUsersByPointTotals(int top)
@@ -206,20 +240,21 @@ namespace PopForums.Sql.Repositories
 			return list;
 		}
 
-		public void DeleteUser(User user)
+		public async Task DeleteUser(User user)
 		{
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				connection.Execute("DELETE FROM pf_PopForumsUser WHERE UserID = @UserID", new { user.UserID }));
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				connection.ExecuteAsync("DELETE FROM pf_PopForumsUser WHERE UserID = @UserID", new { user.UserID }));
+			RemoveCacheUser(user.Name);
 		}
 
-		private List<User> GetList(string sql, object parameters)
+		private async Task<List<User>> GetList(string sql, object parameters)
 		{
 			if (parameters == null)
 				return new List<User>();
-			List<User> list = null;
-			_sqlObjectFactory.GetConnection().Using(connection =>
-				list = connection.Query<User>(sql, parameters).ToList());
-			return list;
+			Task<IEnumerable<User>> list = null;
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				list = connection.QueryAsync<User>(sql, parameters));
+			return list.Result.ToList();
 		}
 	}
 }

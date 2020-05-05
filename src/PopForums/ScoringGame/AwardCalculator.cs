@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using PopForums.Configuration;
 using PopForums.Models;
 using PopForums.Repositories;
@@ -8,8 +9,8 @@ namespace PopForums.ScoringGame
 {
 	public interface IAwardCalculator
 	{
-		void QueueCalculation(User user, EventDefinition eventDefinition);
-		void ProcessCalculation(string eventDefinitionID, int userID);
+		Task QueueCalculation(User user, EventDefinition eventDefinition);
+		Task ProcessCalculation(string eventDefinitionID, int userID);
 	}
 
 	public class AwardCalculator : IAwardCalculator
@@ -35,17 +36,17 @@ namespace PopForums.ScoringGame
 		private readonly IPointLedgerRepository _pointLedgerRepository;
 		private readonly ITenantService _tenantService;
 
-		public void QueueCalculation(User user, EventDefinition eventDefinition)
+		public async Task QueueCalculation(User user, EventDefinition eventDefinition)
 		{
 			var tenantID = _tenantService.GetTenant();
 			var payload = new AwardCalculationPayload {EventDefinitionID = eventDefinition.EventDefinitionID, UserID = user.UserID, TenantID = tenantID};
-			_awardCalcRepository.Enqueue(payload);
+			await _awardCalcRepository.Enqueue(payload);
 		}
 
-		public void ProcessCalculation(string eventDefinitionID, int userID)
+		public async Task ProcessCalculation(string eventDefinitionID, int userID)
 		{
-			var eventDefinition = _eventDefinitionService.GetEventDefinition(eventDefinitionID);
-			var user = _userRepository.GetUser(userID);
+			var eventDefinition = await _eventDefinitionService.GetEventDefinition(eventDefinitionID);
+			var user = await _userRepository.GetUser(userID);
 			if (eventDefinition == null)
 			{
 				_errorLog.Log(new Exception($"Event calculation attempt on nonexistent event \"{eventDefinitionID}\""), ErrorSeverity.Warning);
@@ -56,25 +57,25 @@ namespace PopForums.ScoringGame
 				_errorLog.Log(new Exception($"Event calculation attempt on nonexistent user {userID}"), ErrorSeverity.Warning);
 				return;
 			}
-			var associatedAwards = _awardDefinitionService.GetByEventDefinitionID(eventDefinition.EventDefinitionID);
+			var associatedAwards = await _awardDefinitionService.GetByEventDefinitionID(eventDefinition.EventDefinitionID);
 			foreach (var award in associatedAwards)
 			{
 				if (award.IsSingleTimeAward)
 				{
-					var isAwarded = _userAwardService.IsAwarded(user, award);
+					var isAwarded = await _userAwardService.IsAwarded(user, award);
 					if (isAwarded)
 						continue;
 				}
-				var conditions = _awardDefinitionService.GetConditions(award.AwardDefinitionID);
+				var conditions = await _awardDefinitionService.GetConditions(award.AwardDefinitionID);
 				var conditionsMet = 0;
 				foreach (var condition in conditions)
 				{
-					var eventCount = _pointLedgerRepository.GetEntryCount(user.UserID, condition.EventDefinitionID);
+					var eventCount = await _pointLedgerRepository.GetEntryCount(user.UserID, condition.EventDefinitionID);
 					if (eventCount >= condition.EventCount)
 						conditionsMet++;
 				}
 				if (conditions.Count != 0 && conditionsMet == conditions.Count)
-					_userAwardService.IssueAward(user, award);
+					await _userAwardService.IssueAward(user, award);
 			}
 		}
 	}

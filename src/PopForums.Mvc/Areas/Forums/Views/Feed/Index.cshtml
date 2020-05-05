@@ -5,7 +5,7 @@
 @{
 	ViewBag.Title = PopForums.Resources.ActivityFeed;
 	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
-	var profile = UserRetrievalShim.GetProfile(Context);
+	var profile = UserRetrievalShim.GetProfile();
 }
 
 @section HeaderContent {
@@ -19,7 +19,7 @@
 <div>
 	<h1>@PopForums.Resources.ActivityFeed</h1>
 	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent" asp-route-page="">@PopForums.Resources.Recent</a></li>
+		<li class="breadcrumb-item"><a asp-controller="@ForumController.Name" asp-action="Recent" asp-route-pageNumber="">@PopForums.Resources.Recent</a></li>
 		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
 	</ul>
 </div>
@@ -27,12 +27,12 @@
 <div id="FeedList">
 @foreach (var item in Model)
 {
-	<div class="alert alert-light">
+	<div class="alert alert-light mt-2">
 		<div class="feedItemText">@Html.Raw(item.Message)</div>
 		<div class="text-right small fTime" data-utc="@item.TimeStamp.ToString("o")">@TimeFormattingService.GetFormattedTime(item.TimeStamp, profile)</div>
 	</div>
 }
-	<div id="ActivityFeedTemplate" class="alert alert-light" style="display: none;">
+	<div id="ActivityFeedTemplate" class="alert alert-light mt-2" style="display: none;">
 		<div class="feedItemText"></div>
 		<div class="text-right small fTime" data-utc=""></div>
 	</div>
