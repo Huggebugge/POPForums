@@ -1,4 +1,4 @@
-﻿using System;
+﻿	using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -287,6 +287,18 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			await _userService.EditUserProfileImages(user, false, false, null, file.OpenReadStream().ToBytes());
 			var profile = await _profileService.GetProfile(user);
 			return new { profile.ImageID };
+		}
+		[HttpPost("/Forums/AdminApi/UpdateAwardImage/{id}")]
+		public async Task<ActionResult<dynamic>> UpdateAwardImage(string id)
+		{
+			if (Request.Form?.Files?.Count != 1)
+			{
+				await _awardDefinitionService.EditAwardImage(id, null);
+				return new { ImageID = (int?)null };
+			}
+			var file = Request.Form.Files[0];
+			await _awardDefinitionService.EditAwardImage(id, file.OpenReadStream().ToBytes());
+			return Ok();
 		}
 
 		[HttpPost("/Forums/AdminApi/SaveUser")]

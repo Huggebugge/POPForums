@@ -10,9 +10,9 @@ namespace PopForums.Repositories
 		void UpdateCharacter(TibiaCharacter character);
 		void AddCharacter(TibiaCharacter character);
 		void LogOnlineTime(TibiaCharacter character);
-		List<TibiaCharacterOnlineStatistics> GetOnlineStatistics();
-		List<TibiaEvent> GetEvents();
-		List<TibiaCharacter> GetCharactersByUserID(int userID);
+		Task<List<TibiaCharacterOnlineStatistics>> GetOnlineStatistics();
+		Task<List<TibiaEvent>> GetEvents();
+		Task<List<TibiaCharacter>> GetCharactersByUserID(int userID);
 		void DeleteUserCharacter(string character);
 	}
 }

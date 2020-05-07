@@ -18,26 +18,30 @@ namespace PopForums.Services
 	{
 		Task<bool?> IsUserImageApproved(int userImageID);
 		Task<byte[]> GetAvatarImageData(int userAvatarID);
+		Task<byte[]> GetAwardImageData(string awardID);
 		Task<byte[]> GetUserImageData(int userImageID);
 		Task<DateTime?> GetAvatarImageLastModification(int userAvatarID);
 		Task<DateTime?> GetUserImageLastModifcation(int userImageID);
+		Task<DateTime?> GetAwardImageLastModifcation(string awardID);
 		byte[] ConstrainResize(byte[] bytes, int maxWidth, int maxHeight, int qualityLevel);
 		Task<List<UserImage>> GetUnapprovedUserImages();
 		Task ApproveUserImage(int userImageID);
 		Task DeleteUserImage(int userImageID);
 		Task<UserImage> GetUserImage(int userImageID);
+		Task<AwardImage> GetAwardImage(string awardID);
 		Task<UserImageApprovalContainer> GetUnapprovedUserImageContainer();
 	}
 
 	public class ImageService : IImageService
 	{
-		public ImageService(IUserAvatarRepository userAvatarRepository, IUserImageRepository userImageRepository, IProfileService profileService, IUserRepository userRepository, ISettingsManager settingsManager)
+		public ImageService(IUserAvatarRepository userAvatarRepository, IUserImageRepository userImageRepository, IProfileService profileService, IUserRepository userRepository, ISettingsManager settingsManager, IAwardImageRepository awardImageRepository)
 		{
 			_userAvatarRepository = userAvatarRepository;
 			_userImageRepository = userImageRepository;
 			_profileService = profileService;
 			_userRepository = userRepository;
 			_settingsManager = settingsManager;
+			_awardImageRepository = awardImageRepository;
 		}
 
 		private readonly IUserAvatarRepository _userAvatarRepository;
@@ -45,6 +49,7 @@ namespace PopForums.Services
 		private readonly IProfileService _profileService;
 		private readonly IUserRepository _userRepository;
 		private readonly ISettingsManager _settingsManager;
+		private readonly IAwardImageRepository _awardImageRepository;
 
 		public async Task<bool?> IsUserImageApproved(int userImageID)
 		{
@@ -54,6 +59,10 @@ namespace PopForums.Services
 		public async Task<UserImage> GetUserImage(int userImageID)
 		{
 			return await _userImageRepository.Get(userImageID);
+		}
+		public async Task<AwardImage> GetAwardImage(string awardID)
+		{
+			return await _awardImageRepository.Get(awardID);
 		}
 
 		public async Task ApproveUserImage(int userImageID)
@@ -78,7 +87,10 @@ namespace PopForums.Services
 		{
 			return await _userImageRepository.GetImageData(userImageID);
 		}
-
+		public async Task<byte[]> GetAwardImageData(string awardID)
+		{
+			return await _awardImageRepository.GetImageData(awardID);
+		}
 		public async Task<List<UserImage>> GetUnapprovedUserImages()
 		{
 			return await _userImageRepository.GetUnapprovedUserImages();
@@ -89,11 +101,16 @@ namespace PopForums.Services
 			return await _userAvatarRepository.GetLastModificationDate(userAvatarID);
 		}
 
+
 		public async Task<DateTime?> GetUserImageLastModifcation(int userImageID)
 		{
 			return await _userImageRepository.GetLastModificationDate(userImageID);
 		}
 
+		public async Task<DateTime?> GetAwardImageLastModifcation(string awardID)
+		{
+			return await _awardImageRepository.GetLastModificationDate(awardID);
+		}
 		public byte[] ConstrainResize(byte[] bytes, int maxWidth, int maxHeight, int qualityLevel)
 		{
 			if (bytes == null)
@@ -129,5 +146,6 @@ namespace PopForums.Services
 			}
 			return container;
 		}
+
 	}
 }

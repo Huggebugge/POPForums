@@ -42,13 +42,6 @@ namespace PopForums.Configuration
 			MailSignature = String.Empty;
 			ScoringGameCalculatorInterval = 1000;
 			MailerQuantity = 4;
-			UseGoogleLogin = false;
-			UseFacebookLogin = false;
-			FacebookAppID = String.Empty;
-			FacebookAppSecret = String.Empty;
-			UseMicrosoftLogin = false;
-			MicrosoftClientID = String.Empty;
-			MicrosoftClientSecret = String.Empty;
 			YouTubeHeight = 360;
 			YouTubeWidth = 640;
 			GoogleClientId = String.Empty;
@@ -62,6 +55,7 @@ namespace PopForums.Configuration
 			OAuth2Scope = "email";
 			IsClosingAgedTopics = false;
 			CloseAgedTopicsDays = 365;
+			TibiaUpdateInterval = 5 * 60 * 1000;
 		}
 
 		public virtual string TermsOfService { get; set; }
@@ -100,13 +94,6 @@ namespace PopForums.Configuration
 		public virtual string MailSignature { get; set; }
 		public virtual int ScoringGameCalculatorInterval { get; set; }
 		public virtual int MailerQuantity { get; set; }
-		public virtual bool UseGoogleLogin { get; set; }
-		public virtual bool UseFacebookLogin { get; set; }
-		public virtual string FacebookAppID { get; set; }
-		public virtual string FacebookAppSecret { get; set; }
-		public virtual bool UseMicrosoftLogin { get; set; }
-		public virtual string MicrosoftClientID { get; set; }
-		public virtual string MicrosoftClientSecret { get; set; }
 		public virtual int YouTubeHeight { get; set; }
 		public virtual int YouTubeWidth { get; set; }
 		public virtual string GoogleClientId { get; set; }
@@ -120,5 +107,6 @@ namespace PopForums.Configuration
 		public virtual string OAuth2Scope { get; set; }
 		public virtual bool IsClosingAgedTopics { get; set; }
 		public virtual int CloseAgedTopicsDays { get; set; }
+		public int TibiaUpdateInterval { get; }
 	}
 }

@@ -20,7 +20,8 @@ namespace PopForums.ScoringGame
 		    {StaticEventIDs.PostVote, new EventDefinition {EventDefinitionID = StaticEventIDs.PostVote, Description = "Post vote", PointValue = 1, IsPublishedToFeed = true}},
 		    {StaticEventIDs.NewPost, new EventDefinition {EventDefinitionID = StaticEventIDs.NewPost, Description = "New post", PointValue = 0, IsPublishedToFeed = true}},
 		    {StaticEventIDs.NewTopic, new EventDefinition {EventDefinitionID = StaticEventIDs.NewTopic, Description = "New topic", PointValue = 0, IsPublishedToFeed = true}},
-		    {StaticEventIDs.QuestionAnswered, new EventDefinition {EventDefinitionID = StaticEventIDs.QuestionAnswered, Description = "Question answered", PointValue = 10, IsPublishedToFeed = true}}
+		    {StaticEventIDs.QuestionAnswered, new EventDefinition {EventDefinitionID = StaticEventIDs.QuestionAnswered, Description = "Question answered", PointValue = 10, IsPublishedToFeed = true}},
+			{StaticEventIDs.LevelUp, new EventDefinition {EventDefinitionID = StaticEventIDs.LevelUp, Description = "Level Up", PointValue = 10, IsPublishedToFeed = true}}
 		};
 
 		public static class StaticEventIDs
@@ -28,7 +29,8 @@ namespace PopForums.ScoringGame
 			public static string PostVote = "PostVote";
 			public static string NewPost = "NewPost";
 			public static string NewTopic = "NewTopic";
-			public static string QuestionAnswered = "QuestionAnswered";
+			public static string QuestionAnswered = "QuestionAnswered"; 
+			public static string LevelUp = "LevelUp";
 		}
 
 		public EventDefinitionService(IEventDefinitionRepository eventDefinitionRepository, IAwardConditionRepository awardConditionRepository)

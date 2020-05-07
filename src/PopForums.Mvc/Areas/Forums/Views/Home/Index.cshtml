@@ -68,6 +68,13 @@
 	<p>
 		@PopForums.Resources.Total: @ViewBag.TotalUsers@foreach (var u in (List<PopForums.Models.User>)ViewBag.OnlineUsers)
 		{<text>, </text><a asp-controller="Account" asp-action="ViewProfile" asp-route-id="@u.UserID">@u.Name</a>}
+	</p>	
+	<h3>Members Online</h3>
+	<p>
+		@PopForums.Resources.Total: @ViewBag.OnlineMembers.Count@foreach (var u in (List<TibiaCharacter>)ViewBag.OnlineMembers)
+		{
+			<text>, </text><a asp-controller="Account" asp-action="ViewProfile" asp-route-id="@u.User.UserID">@u.Name</a>
+		}
 	</p>
 	<p>@PopForums.Resources.TotalTopics: @ViewBag.TopicCount, @PopForums.Resources.TotalPosts: @ViewBag.PostCount, @PopForums.Resources.RegisteredUsers: @ViewBag.RegisteredUsers</p>
 </div>

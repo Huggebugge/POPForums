@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using PopForums.ScoringGame;
+using System.Collections.Generic;
 
 namespace PopForums.Models
 {
@@ -11,5 +12,7 @@ namespace PopForums.Models
 		public User User { get; set; }
 		public Profile Profile { get; set; }
 		public Topic Topic { get; set; }
+		public List<UserAward> Awards { get; set; }
+		public List<TibiaCharacterOnlineStatistics> OnlineStatistics { get; set; }
 	}
 }

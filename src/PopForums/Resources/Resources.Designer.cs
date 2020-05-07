@@ -2176,7 +2176,7 @@ namespace PopForums {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to POP Forums Administration.
+        ///   Looks up a localized string similar to Forums Administration.
         /// </summary>
         public static string PopForumsAdmin {
             get {

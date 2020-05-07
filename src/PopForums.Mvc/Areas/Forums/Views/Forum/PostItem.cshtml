@@ -25,6 +25,13 @@
 			{
 				@:IP: @Model.Post.IP -
 			}
+			@if (Model.User != null && Model.User.IsInRole(PermanentRoles.Member))
+			{
+				if (Model.OnlineStatistics.Any(o => o.UserID == Model.Post.UserID))
+				{
+					@:Online Time This Week: @Model.OnlineStatistics.Where(o => o.UserID == Model.Post.UserID).Sum(o => o.OnlineTimeThisWeek) minutes-
+				}
+			}
 			<span class="fTime" data-utc="@Model.Post.PostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(Model.Post.PostTime, Model.Profile)</span>
 		</small>
 	</div>
@@ -39,51 +46,64 @@
 		<small>@String.Format(PopForums.Resources.NameLastEdit, Model.Post.LastEditName), <span class="fTime" data-utc="@Model.Post.LastEditTime.Value.ToString("o")">@TimeFormattingService.GetFormattedTime(Model.Post.LastEditTime.Value, Model.Profile)</span></small>
 	}
 
-	@if (Model.Post.ShowSig && !hideVanity && (Model.Signatures).ContainsKey(Model.Post.UserID))
+	@if (Model.Signatures.ContainsKey(Model.Post.UserID))
 	{
 		<hr />
 		<div class="text-secondary">@Html.Raw((Model.Signatures)[Model.Post.UserID])</div>
 	}
-	<div class="postToolContainer">
-		<div class="voteCount badge badge-primary">@await Html.PartialAsync("Votes.cshtml", Model.Post.Votes)</div>
-		<ul class="postTools list-inline">
-			@if (Model.User != null && Model.User.UserID != Model.Post.UserID)
+
+	@if (Model.Awards != null && Model.Awards.Count(p => p.UserID == Model.Post.UserID) > 0)
+	{
+		<hr />
+		<div class="awards">
+			@foreach (var award in Model.Awards.Where(p => p.UserID == Model.Post.UserID))
 			{
-				if (Model.VotedPostIDs.Contains(Model.Post.PostID))
+				<img src="@Url.Action("AwardImage", "Image", new { awardId = award.AwardDefinitionID })" alt="@award.Description" class="avatar" />
+				<div title="@award.Description" class="achievement @Html.Raw(award.Title.ToLower())">@Html.Raw(award.Title)</div>
+			}
+		</div>
+	}
+		<div class="postToolContainer">
+			<div class="voteCount badge badge-primary">@await Html.PartialAsync("Votes.cshtml", Model.Post.Votes)</div>
+			<ul class="postTools list-inline">
+				@if (Model.User != null && Model.User.UserID != Model.Post.UserID)
 				{
-					<li class="list-inline-item">@PopForums.Resources.Voted</li>
+					if (Model.VotedPostIDs.Contains(Model.Post.PostID))
+					{
+						<li class="list-inline-item">@PopForums.Resources.Voted</li>
+					}
+					else
+					{
+						<li class="voteUp btn-link list-inline-item">Vote up</li>
+					}
 				}
-				else
+				<li class="list-inline-item">@Html.ActionLink(PopForums.Resources.Link, "PostLink", "Forum", new { id = Model.Post.PostID }, null)</li>
+				@if (user != null && Model.Topic != null && Model.Topic.IsClosed == false)
 				{
-					<li class="voteUp btn-link list-inline-item">Vote up</li>}
-			}
-			<li class="list-inline-item">@Html.ActionLink(PopForums.Resources.Link, "PostLink", "Forum", new { id = Model.Post.PostID }, null)</li>
-			@if (user != null && Model.Topic != null && Model.Topic.IsClosed == false)
-			{
-				<li class="list-inline-item"><input type="button" class="replyLink btn-link list-inline-item" value="@PopForums.Resources.Reply" /></li>
-				<li class="list-inline-item"><input type="button" class="quoteLink btn-link list-inline-item" value="@PopForums.Resources.Quote" /></li>
-			}
-			@if (Model.User.IsPostEditable(Model.Post))
-			{
-				<li class="list-inline-item">@Html.ActionLink(PopForums.Resources.Edit, "Edit", "Forum", new { id = Model.Post.PostID }, null)</li>
-				if (Model.Post.IsDeleted)
-				{
-					<li class="list-inline-item">
-						<form asp-action="UndeletePost" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Post.PostID" class="deletePostForm d-inline-block"><input type="submit" value="@PopForums.Resources.Undelete" class="btn-link" /></form>
-					</li>
+					<li class="list-inline-item"><input type="button" class="replyLink btn-link list-inline-item" value="@PopForums.Resources.Reply" /></li>
+					<li class="list-inline-item"><input type="button" class="quoteLink btn-link list-inline-item" value="@PopForums.Resources.Quote" /></li>
 				}
-				else
+				@if (Model.User.IsPostEditable(Model.Post))
 				{
-					<li class="list-inline-item">
-						<form asp-action="DeletePost" asp-controller="Forum" asp-antiforgery="false" asp-route-id="@Model.Post.PostID" class="deletePostForm d-inline-block"><input type="submit" value="@deleteLink" class="btn-link" /></form>
-					</li>
+					<li class="list-inline-item">@Html.ActionLink(PopForums.Resources.Edit, "Edit", "Forum", new { id = Model.Post.PostID }, null)</li>
+					if (Model.Post.IsDeleted)
+					{
+						<li class="list-inline-item">
+							<form asp-action="UndeletePost" asp-controller="Moderator" asp-antiforgery="false" asp-route-id="@Model.Post.PostID" class="deletePostForm d-inline-block"><input type="submit" value="@PopForums.Resources.Undelete" class="btn-link" /></form>
+						</li>
+					}
+					else
+					{
+						<li class="list-inline-item">
+							<form asp-action="DeletePost" asp-controller="Forum" asp-antiforgery="false" asp-route-id="@Model.Post.PostID" class="deletePostForm d-inline-block"><input type="submit" value="@deleteLink" class="btn-link" /></form>
+						</li>
+					}
 				}
-			}
-			@if (Model.Post.IsEdited && Model.User != null && Model.User.IsInRole(PermanentRoles.Moderator))
-			{
-				<li class="list-inline-item"><input data-postid="@Model.Post.PostID" class="btn-link postModLogButton" type="button" value="@PopForums.Resources.ModerationLog" /></li>
-			}
-		</ul>
-		<div class="moderationLog rounded my-3 px-3 py-1"></div>
+				@if (Model.Post.IsEdited && Model.User != null && Model.User.IsInRole(PermanentRoles.Moderator))
+				{
+					<li class="list-inline-item"><input data-postid="@Model.Post.PostID" class="btn-link postModLogButton" type="button" value="@PopForums.Resources.ModerationLog" /></li>
+				}
+			</ul>
+			<div class="moderationLog rounded my-3 px-3 py-1"></div>
+		</div>
 	</div>
-</div>

@@ -1,6 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using PopForums.Configuration;
+using PopForums.Models;
 using PopForums.Repositories;
+using PopForums.Services;
 
 namespace PopForums.ScoringGame
 {
@@ -14,19 +18,26 @@ namespace PopForums.ScoringGame
 		Task SaveConditions(AwardDefinition awardDefinition, List<AwardCondition> conditions);
 		Task<List<AwardDefinition>> GetAll();
 		Task DeleteCondition(string awardDefinitionID, string eventDefinitionID);
-		Task AddCondition(AwardCondition awardDefintion);
+		Task AddCondition(AwardCondition awardDefintion); 
+		Task EditAwardImage(string awardId, byte[] awardFile);
 	}
 
 	public class AwardDefinitionService : IAwardDefinitionService
 	{
-		public AwardDefinitionService(IAwardDefinitionRepository awardDefintionRepository, IAwardConditionRepository awardConditionRepository)
+		public AwardDefinitionService(IAwardDefinitionRepository awardDefintionRepository, IAwardConditionRepository awardConditionRepository, IAwardImageRepository awardImageRepository, IImageService imageService, ISettingsManager settingsManager)
 		{
 			_awardDefinitionRepository = awardDefintionRepository;
 			_awardConditionRepository = awardConditionRepository;
+			_awardImageRepository = awardImageRepository;
+			_imageService = imageService;
+			_settingsManager = settingsManager;
 		}
 
 		private readonly IAwardDefinitionRepository _awardDefinitionRepository;
 		private readonly IAwardConditionRepository _awardConditionRepository;
+		private readonly IAwardImageRepository _awardImageRepository;
+		private readonly IImageService _imageService;
+		private readonly ISettingsManager _settingsManager;
 
 		public async Task<AwardDefinition> Get(string awardDefinitionID)
 		{
@@ -74,6 +85,17 @@ namespace PopForums.ScoringGame
 		public async Task AddCondition(AwardCondition awardDefintion)
 		{
 			await _awardConditionRepository.SaveConditions(new List<AwardCondition> {awardDefintion});
+		}
+
+		public async Task EditAwardImage(string awardId, byte[] awardFile)
+		{
+
+			if (awardFile != null && awardFile.Length > 0)
+			{
+				await _awardImageRepository.DeleteImagesByAwardID(awardId);
+				var bytes = _imageService.ConstrainResize(awardFile, _settingsManager.Current.UserImageMaxWidth, _settingsManager.Current.UserImageMaxHeight, 70);
+				await _awardImageRepository.SaveNewImage(awardId, bytes, DateTime.UtcNow);
+			}
 		}
 	}
 }

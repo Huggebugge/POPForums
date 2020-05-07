@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PopForums.ScoringGame;
+using System;
 using System.Collections.Generic;
 
 namespace PopForums.Models
@@ -16,5 +17,7 @@ namespace PopForums.Models
 		public Dictionary<int, int> Avatars { get; set; }
 		public List<int> VotedPostIDs { get; set; }
 		public DateTime? LastReadTime { get; set; }
+		public List<UserAward> Awards { get; set; }
+		public List<TibiaCharacterOnlineStatistics> OnlineStatistics { get; set; }
 	}
 }

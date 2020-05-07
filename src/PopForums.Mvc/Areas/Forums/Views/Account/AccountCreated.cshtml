@@ -5,11 +5,9 @@
 
 <div>
 	<h1>@PopForums.Resources.AccountCreated</h1>
+	<h2>@Model.AuthorizationKey</h2>
 	<ul id="TopBreadcrumb" class="breadcrumb">
-		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a> </li>
+		<li class="breadcrumb-item"><a asp-action="Validate">Click here after you are done</a> </li>
 	</ul>
 </div>
-
-<p class="alert alert-danger">@ViewData["EmailProblem"] @ViewData["Result"]</p>
-
-<p><a asp-action="EditProfile">@PopForums.Resources.EditYourProfile</a></p>
+<p><a asp-action="Validate">@PopForums.Resources.EditYourProfile</a></p>

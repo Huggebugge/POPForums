@@ -663,6 +663,16 @@ const AwardDefinitions = {
 					this.endLoad();
 				});
 		},
+		uploadAwardImage: function (target, awardId) {
+			console.log("Here")
+			const formData = new FormData();
+			var files = target.files;
+			formData.append("imageFile", files[0], files[0].name);
+			axios.post(basePath + "UpdateAwardImage/" + awardId, formData).then(response => {
+				this.user.imageID = response.data.imageID;
+				target.value = "";
+			});
+		},
 		resetAward: function () {
 			this.newAward.awardDefinitionID = "";
 			this.newAward.title = "";

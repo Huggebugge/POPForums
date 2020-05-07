@@ -51,7 +51,6 @@
 				<router-link to="/forumpermissions" class="dropdown-item">@PopForums.Resources.ForumPermisions</router-link>
 				<router-link to="/email" class="dropdown-item">@PopForums.Resources.Email</router-link>
 				<router-link to="/search" class="dropdown-item">@PopForums.Resources.Search</router-link>
-				<router-link to="/externallogins" class="dropdown-item">@PopForums.Resources.ExternalLogins</router-link>
 				<div class="dropdown-divider"></div>
 				<router-link to="/edituser" class="dropdown-item">@PopForums.Resources.EditUser</router-link>
 				<router-link to="/userroles" class="dropdown-item">@PopForums.Resources.UserRoles</router-link>
@@ -59,7 +58,6 @@
 				<router-link to="/emailipban" class="dropdown-item">@PopForums.Resources.EmailIpBan</router-link>
 				<router-link to="/emailusers" class="dropdown-item">@PopForums.Resources.EmailUsers</router-link>
 				<div class="dropdown-divider"></div>
-				<router-link to="/scoringgame" class="dropdown-item">@PopForums.Resources.ScoringGame</router-link>
 				<router-link to="/eventdefinitions" class="dropdown-item">@PopForums.Resources.EventDefinitions</router-link>
 				<router-link to="/awarddefinitions" class="dropdown-item">@PopForums.Resources.AwardDefinitions</router-link>
 				<router-link to="/manualevent" class="dropdown-item">@PopForums.Resources.ManualEvent</router-link>
@@ -524,84 +522,6 @@
 	</main>
 </script>
 
-<script type="x-templates" id="ExternalLogins">
-	<main>
-		<h2>@PopForums.Resources.ExternalLogins</h2>
-		<p>(registered redirect URI is https://yourdomain/Forums/Identity/CallbackHandler)</p>
-
-		<table class="table">
-			<tr>
-				<th>Google</th>
-				<td><input type="checkbox" v-model="settings.useGoogleLogin" /></td>
-			</tr>
-			<tr>
-				<td>ClientId:</td>
-				<td><input type="text" v-model="settings.googleClientId" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>ClientSecret:</td>
-				<td><input type="text" v-model="settings.googleClientSecret" class="form-control" /></td>
-			</tr>
-			<tr>
-				<th>Facebook</th>
-				<td><input type="checkbox" v-model="settings.useFacebookLogin" /></td>
-			</tr>
-			<tr>
-				<td>AppID:</td>
-				<td><input type="text" v-model="settings.facebookAppID" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>AppSecret:</td>
-				<td><input type="text" v-model="settings.facebookAppSecret" class="form-control" /></td>
-			</tr>
-			<tr>
-				<th>Microsoft</th>
-				<td><input type="checkbox" v-model="settings.useMicrosoftLogin" /></td>
-			</tr>
-			<tr>
-				<td>ClientID:</td>
-				<td><input type="text" v-model="settings.microsoftClientID" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>ClientSecret:</td>
-				<td><input type="text" v-model="settings.microsoftClientSecret" class="form-control" /></td>
-			</tr>
-			<tr>
-				<th>OAuth2 returning JWT</th>
-				<td><input type="checkbox" v-model="settings.useOAuth2Login" /></td>
-			</tr>
-			<tr>
-				<td>Client ID:</td>
-				<td><input type="text" v-model="settings.oAuth2ClientID" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>Client Secret:</td>
-				<td><input type="text" v-model="settings.oAuth2ClientSecret" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>Base login URL:</td>
-				<td><input type="text" v-model="settings.oAuth2LoginUrl" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>Token URL:</td>
-				<td><input type="text" v-model="settings.oAuth2TokenUrl" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>Display name:</td>
-				<td><input type="text" v-model="settings.oAuth2DisplayName" class="form-control" /></td>
-			</tr>
-			<tr>
-				<td>Scope (separate by space):</td>
-				<td><input type="text" v-model="settings.oAuth2Scope" class="form-control" /></td>
-			</tr>
-		</table>
-
-
-		<input type="button" v-on:click="save('@PopForums.Resources.SettingsSaved')" :disabled="loading" value="@PopForums.Resources.Save" class="btn btn-primary" />
-		<transition name="fade"><span v-show="alert" class="alert alert-success">{{message}}</span></transition>
-	</main>
-</script>
-
 <script type="x-templates" id="EditUser">
 	<main>
 		<h2>@PopForums.Resources.EditUser</h2>
@@ -676,12 +596,6 @@
 		</div>
 		<div class="form-group row">
 			<div class="offset-2 col-10">
-				<input class="form-check-input" type="checkbox" id="IsSubscribed" v-model="user.isSubscribed" />
-				<label class="form-check-label" for="IsSubscribed">@PopForums.Resources.SubscribeToList</label>
-			</div>
-		</div>
-		<div class="form-group row">
-			<div class="offset-2 col-10">
 				<input class="form-check-input" type="checkbox" id="ShowDetails" v-model="user.showDetails" />
 				<label class="form-check-label" for="ShowDetails">@PopForums.Resources.ShowProfileDetails</label>
 			</div>
@@ -690,12 +604,6 @@
 			<div class="offset-2 col-10">
 				<input class="form-check-input" type="checkbox" id="IsPlainText" v-model="user.isPlainText" />
 				<label class="form-check-label" for="IsPlainText">@PopForums.Resources.ForcePlainTextBox</label>
-			</div>
-		</div>
-		<div class="form-group row">
-			<div class="offset-2 col-10">
-				<input class="form-check-input" type="checkbox" id="HideVanity" v-model="user.hideVanity" />
-				<label class="form-check-label" for="HideVanity">@PopForums.Resources.HideVanity</label>
 			</div>
 		</div>
 		<div class="form-group row">
@@ -732,36 +640,6 @@
 			<label for="Dob" class="col-2 control-label">@PopForums.Resources.DateOfBirth</label>
 			<div class="col-10">
 				<input type="text" id="Dob" class="form-control" v-model="user.dob" />
-			</div>
-		</div>
-		<div class="form-group row">
-			<label for="Facebook" class="col-2 control-label">Facebook</label>
-			<div class="col-10">
-				<div class="input-group">
-					<div class="input-group-prepend"><div class="input-group-text">https://facebook.com/</div></div>
-					<input type="text" id="Facebook" class="form-control" v-model="user.facebook" />
-				</div>
-			</div>
-		</div>
-		<div class="form-group row">
-			<label for="Twitter" class="col-2 control-label">Twitter</label>
-			<div class="col-10">
-				<div class="input-group">
-					<div class="input-group-prepend"><div class="input-group-text">&#64;</div></div>
-					<input type="text" id="Twitter" class="form-control" v-model="user.twitter" />
-				</div>
-			</div>
-		</div>
-		<div class="form-group row">
-			<label for="Instagram" class="col-2 control-label">Instagram</label>
-			<div class="col-10">
-				<input type="text" id="Instagram" class="form-control" v-model="user.instagram" />
-			</div>
-		</div>
-		<div class="form-group row">
-			<label for="Web" class="col-2 control-label">@PopForums.Resources.Web</label>
-			<div class="col-10">
-				<input type="text" id="Web" class="form-control" v-model="user.web" />
 			</div>
 		</div>
 
@@ -1022,6 +900,11 @@
 						<div class="form-group row">
 							<div class="col-sm-7 offset-sm-5">
 								<div class="checkbox"><label for="issingle"><input type="checkbox" v-model="newAward.isSingleTimeAward" id="issingle" /> Single-time Award</label></div>
+							</div>
+						</div>
+						<div class="form-group row">
+							<div class="col-sm-7 offset-sm-5">
+								<input type="file" :disabled="loading" v-on:change="uploadAwardImage($event.target, newAward.awardDefinitionID)" accept="image/*" class="form-control-file mb-3">
 							</div>
 						</div>
 					</div>

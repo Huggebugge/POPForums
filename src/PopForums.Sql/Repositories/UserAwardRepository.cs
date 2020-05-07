@@ -42,5 +42,18 @@ INSERT (UserID, AwardDefinitionID, Title, Description, TimeStamp) VALUES (@UserI
 				list = connection.QueryAsync<UserAward>("SELECT UserAwardID, UserID, AwardDefinitionID, Title, Description, TimeStamp FROM pf_UserAward WHERE UserID = @UserID", new { UserID = userID }));
 			return list.Result.ToList();
 		}
+
+		public async Task<List<UserAward>> GetAllAwards(List<int> userIDs)
+		{
+			Task<IEnumerable<UserAward>> awards = null;
+			if (userIDs.Count == 0)
+				return null;
+			var inList = userIDs.Aggregate(String.Empty, (current, userID) => current + ("," + userID));
+			if (inList.StartsWith(","))
+				inList = inList.Remove(0, 1);
+			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
+				awards = connection.QueryAsync<UserAward>($"SELECT UserAwardID, UserID, AwardDefinitionID, Title, Description, TimeStamp FROM pf_UserAward WHERE UserID IN ({inList})"));
+			return awards.Result.ToList();
+		}
 	}
 }
