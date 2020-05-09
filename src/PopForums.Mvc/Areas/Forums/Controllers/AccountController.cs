@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using PopForums.Configuration;
 using PopForums.Email;
 using PopForums.Extensions;
-using PopForums.ExternalLogin;
 using PopForums.Feeds;
 using PopForums.Models;
+using PopForums.Mvc.Areas.Forums.Authorization;
 using PopForums.Mvc.Areas.Forums.Models;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.ScoringGame;
@@ -19,7 +19,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 	[Area("Forums")]
 	public class AccountController : Controller
 	{
-		public AccountController(IUserService userService, IProfileService profileService, INewAccountMailer newAccountMailer, ISettingsManager settingsManager, IPostService postService, ITopicService topicService, IForumService forumService, ILastReadService lastReadService, IClientSettingsMapper clientSettingsMapper, IUserEmailer userEmailer, IImageService imageService, IFeedService feedService, IUserAwardService userAwardService, IExternalUserAssociationManager externalUserAssociationManager, IUserRetrievalShim userRetrievalShim, IExternalLoginRoutingService externalLoginRoutingService, IExternalLoginTempService externalLoginTempService, IConfig config, IReCaptchaService reCaptchaService)
+		public AccountController(IUserService userService, IProfileService profileService, INewAccountMailer newAccountMailer, ISettingsManager settingsManager, IPostService postService, ITopicService topicService, IForumService forumService, ILastReadService lastReadService, IClientSettingsMapper clientSettingsMapper, IUserEmailer userEmailer, IImageService imageService, IFeedService feedService, IUserAwardService userAwardService, IUserRetrievalShim userRetrievalShim, IConfig config, IReCaptchaService reCaptchaService, ITibiaService tibiaService)
 		{
 			_userService = userService;
 			_settingsManager = settingsManager;
@@ -34,12 +34,10 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			_imageService = imageService;
 			_feedService = feedService;
 			_userAwardService = userAwardService;
-			_externalUserAssociationManager = externalUserAssociationManager;
 			_userRetrievalShim = userRetrievalShim;
-			_externalLoginRoutingService = externalLoginRoutingService;
-			_externalLoginTempService = externalLoginTempService;
 			_config = config;
 			_reCaptchaService = reCaptchaService;
+			_tibiaService = tibiaService;
 		}
 
 		public static string Name = "Account";
@@ -60,13 +58,12 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly IImageService _imageService;
 		private readonly IFeedService _feedService;
 		private readonly IUserAwardService _userAwardService;
-		private readonly IExternalUserAssociationManager _externalUserAssociationManager;
 		private readonly IUserRetrievalShim _userRetrievalShim;
-		private readonly IExternalLoginRoutingService _externalLoginRoutingService;
-		private readonly IExternalLoginTempService _externalLoginTempService;
 		private readonly IConfig _config;
 		private readonly IReCaptchaService _reCaptchaService;
+		private readonly ITibiaService _tibiaService;
 
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Create()
 		{
 			SetupCreateData();
@@ -76,12 +73,6 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				IsSubscribed = true,
 				TimeZone = _settingsManager.Current.ServerTimeZone
 			};
-			var loginState = _externalLoginTempService.Read();
-			if (loginState != null)
-			{
-				signupData.Email = loginState.ResultData.Email;
-				signupData.Name = loginState.ResultData.Name;
-			}
 			return View(signupData);
 		}
 
@@ -91,7 +82,8 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			ViewData[TosKey] = _settingsManager.Current.TermsOfService;
 			ViewData[ServerTimeZoneKey] = _settingsManager.Current.ServerTimeZone;
 		}
-		
+
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
 		public async Task<ViewResult> Create(SignupData signupData)
 		{
@@ -109,28 +101,20 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				await _profileService.Create(user, signupData);
 				// TODO: get rid of FullUrlHelper extension
 				var verifyUrl = this.FullUrlHelper("Verify", "Account");
-				var result = _newAccountMailer.Send(user, verifyUrl);
-				if (result != SmtpStatusCode.Ok)
-					ViewData["EmailProblem"] = Resources.EmailProblemAccount + (result?.ToString() ?? "App exception") + ".";
 				if (_settingsManager.Current.IsNewUserApproved)
 				{
 					ViewData["Result"] = Resources.AccountReady;
 					await _userService.Login(user, ip);
 				}
-				else
-					ViewData["Result"] = Resources.AccountReadyCheckEmail;
-
-				var loginState = _externalLoginTempService.Read();
-				if (loginState != null)
-				{
-					var externalLoginInfo = new ExternalLoginInfo(loginState.ProviderType.ToString(), loginState.ResultData.ID, loginState.ResultData.Name);
-					await _externalUserAssociationManager.Associate(user, externalLoginInfo, ip);
-					_externalLoginTempService.Remove();
-				}
 
 				await IdentityController.PerformSignInAsync(user, HttpContext);
-
-				return View("AccountCreated");
+				_tibiaService.AddCharacter(new TibiaCharacter
+				{
+					Name = user.Name,
+					Level = 0,
+					UserID = user.UserID
+				});
+				return View("AccountCreated", user);
 			}
 			SetupCreateData();
 			return View(signupData);
@@ -162,51 +146,16 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				modelState.AddModelError("Email", Resources.EmailBanned);
 			if (await _userService.IsIPBanned(ip))
 				modelState.AddModelError("Email", Resources.IPBanned);
+
 		}
 
-		public async Task<ViewResult> Verify(string id)
-		{
-			var authKey = Guid.Empty;
-			if (!string.IsNullOrWhiteSpace(id) && !Guid.TryParse(id, out authKey))
-				return View("VerifyFail");
-			if (string.IsNullOrWhiteSpace(id))
-				return View();
-			var user = await _userService.VerifyAuthorizationCode(authKey, HttpContext.Connection.RemoteIpAddress.ToString());
-			if (user == null)
-				return View("VerifyFail");
-			ViewData["Result"] = Resources.AccountVerified;
-			await _userService.Login(user, HttpContext.Connection.RemoteIpAddress.ToString());
-			return View();
-		}
-
-		[HttpPost]
-		public RedirectToActionResult VerifyCode(string authorizationCode)
-		{
-			return RedirectToAction("Verify", new { id = authorizationCode });
-		}
-
-		public async Task<ViewResult> RequestCode(string email)
-		{
-			var user = await _userService.GetUserByEmail(email);
-			if (user == null)
-			{
-				ViewData["Result"] = Resources.NoUserFoundWithEmail;
-				return View("Verify", new { id = String.Empty });
-			}
-			var verifyUrl = this.FullUrlHelper("Verify", "Account");
-			var result = _newAccountMailer.Send(user, verifyUrl);
-			if (result != SmtpStatusCode.Ok)
-				ViewData["EmailProblem"] = Resources.EmailProblemAccount + result + ".";
-			else
-				ViewData["Result"] = Resources.VerificationEmailSent;
-			return View("Verify", new { id = String.Empty });
-		}
-
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Forgot()
 		{
 			return View();
 		}
 
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
 		public async Task<ViewResult> Forgot(string email)
 		{
@@ -224,6 +173,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View();
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public async Task<ActionResult> ResetPassword(string id)
 		{
 			var authKey = Guid.Empty;
@@ -238,6 +188,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View(container);
 		}
 
+		[PopForumsAuthorizationIgnore]
 		[HttpPost]
 		public async Task<ActionResult> ResetPassword(string id, PasswordResetContainer resetContainer)
 		{
@@ -258,6 +209,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return RedirectToAction("ResetPasswordSuccess");
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public ActionResult ResetPasswordSuccess()
 		{
 			var user = _userRetrievalShim.GetUser();
@@ -346,7 +298,17 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			}
 			return View("Security", new UserEditSecurity { NewEmail = String.Empty, NewEmailRetype = String.Empty, IsNewUserApproved = _settingsManager.Current.IsNewUserApproved });
 		}
-
+		public ViewResult Validate()
+		{
+			var user = _userRetrievalShim.GetUser(); 
+			if (user.IsApproved)
+				RedirectToAction("EditProfile");
+			if(_tibiaService.IsGuidInTibiaCharWebSite(user.AuthorizationKey, user.Name)){
+				_userService.UpdateIsApproved(user, true, null, HttpContext.Connection.RemoteIpAddress.ToString());
+				return View("EditProfile");
+			}
+			return View("VerifyFail");
+		}
 		public async Task<ViewResult> ManagePhotos()
 		{
 			var user = _userRetrievalShim.GetUser();
@@ -437,6 +399,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return Json(_clientSettingsMapper.GetClientSettings(profile));
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public ViewResult Login()
 		{
 			string link;
@@ -450,9 +413,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			}
 			ViewBag.Referrer = link;
 
-			var externalLoginList = _externalLoginRoutingService.GetActiveProviderTypeAndNameDictionary();
-
-			return View(externalLoginList);
+			return View();
 		}
 
 		public async Task<ActionResult> EmailUser(int id)
@@ -490,31 +451,13 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return View("EmailSent");
 		}
 
+		[PopForumsAuthorizationIgnore]
 		public async Task<ViewResult> Unsubscribe(int id, string key)
 		{
 			var user = await _userService.GetUser(id);
 			if (user == null || (await _profileService.Unsubscribe(user, key) == false))
 				return View("UnsubscribeFailure");
 			return View();
-		}
-
-		public async Task<ViewResult> ExternalLogins()
-		{
-			var user = _userRetrievalShim.GetUser();
-			if (user == null)
-				return View("EditAccountNoUser");
-			var externalAssociations = await _externalUserAssociationManager.GetExternalUserAssociations(user);
-			ViewBag.Referrer = Url.Action("ExternalLogins");
-			return View(externalAssociations);
-		}
-
-		public async Task<ActionResult> RemoveExternalLogin(int id)
-		{
-			var user = _userRetrievalShim.GetUser();
-			if (user == null)
-				return View("EditAccountNoUser");
-			await _externalUserAssociationManager.RemoveAssociation(user, id, HttpContext.Connection.RemoteIpAddress.ToString());
-			return RedirectToAction("ExternalLogins");
 		}
 	}
 }

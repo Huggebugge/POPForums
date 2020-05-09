@@ -47,7 +47,8 @@ PopForums.editorSettings = {
 	contextmenu: "",
 	mobile: {
 		theme: "silver"
-	}
+	},
+	paste_as_text: true
 };
 
 PopForums.processLogin = function () {

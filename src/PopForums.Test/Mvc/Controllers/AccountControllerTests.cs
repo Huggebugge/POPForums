@@ -2,7 +2,6 @@
 using Moq;
 using PopForums.Configuration;
 using PopForums.Email;
-using PopForums.ExternalLogin;
 using PopForums.Feeds;
 using PopForums.Mvc.Areas.Forums.Controllers;
 using PopForums.Mvc.Areas.Forums.Services;
@@ -27,12 +26,10 @@ namespace PopForums.Test.Mvc.Controllers
 		private Mock<IImageService> _imageService;
 		private Mock<IFeedService> _feedService;
 		private Mock<IUserAwardService> _userAwardService;
-		private Mock<IExternalUserAssociationManager> _externalUserAssocManager;
 		private Mock<IUserRetrievalShim> _userRetrievalShim;
-		private Mock<IExternalLoginRoutingService> _externalLoginRoutingService;
-		private Mock<IExternalLoginTempService> _externalLoginTempService;
 		private Mock<IConfig> _config;
 		private Mock<IReCaptchaService> _recaptchaService;
+		private Mock<ITibiaService> _tibiaService;
 
 		private AccountController GetController()
 		{
@@ -49,13 +46,11 @@ namespace PopForums.Test.Mvc.Controllers
 			_imageService = new Mock<IImageService>();
 			_feedService = new Mock<IFeedService>();
 			_userAwardService = new Mock<IUserAwardService>();
-			_externalUserAssocManager = new Mock<IExternalUserAssociationManager>();
 			_userRetrievalShim = new Mock<IUserRetrievalShim>();
-			_externalLoginRoutingService = new Mock<IExternalLoginRoutingService>();
-			_externalLoginTempService = new Mock<IExternalLoginTempService>();
 			_config = new Mock<IConfig>();
 			_recaptchaService = new Mock<IReCaptchaService>();
-			return new AccountController(_userService.Object, _profileService.Object, _newAccountMailer.Object, _settingsManager.Object, _postService.Object, _topicService.Object, _forumService.Object, _lastReadService.Object, _clientSettingsMapper.Object, _userEmailer.Object, _imageService.Object, _feedService.Object, _userAwardService.Object, _externalUserAssocManager.Object, _userRetrievalShim.Object, _externalLoginRoutingService.Object, _externalLoginTempService.Object, _config.Object, _recaptchaService.Object);
+			_tibiaService = new Mock<ITibiaService>();
+			return new AccountController(_userService.Object, _profileService.Object, _newAccountMailer.Object, _settingsManager.Object, _postService.Object, _topicService.Object, _forumService.Object, _lastReadService.Object, _clientSettingsMapper.Object, _userEmailer.Object, _imageService.Object, _feedService.Object, _userAwardService.Object, _userRetrievalShim.Object, _config.Object, _recaptchaService.Object, _tibiaService.Object);
 		}
 
 		[Fact]

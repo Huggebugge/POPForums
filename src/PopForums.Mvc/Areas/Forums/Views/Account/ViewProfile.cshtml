@@ -67,43 +67,6 @@
 						<div class="col-8">@Model.Location</div>
 					</div>
 				}
-
-				@if (!String.IsNullOrWhiteSpace(Model.Facebook))
-				{
-					<div class="row">
-						<div class="col-4 text-nowrap"><span class="icon-facebook2"></span> Facebook</div>
-						<div class="col-8"><a href="https://facebook.com/@Model.Facebook" target="_blank">@Model.Facebook</a></div>
-					</div>
-				}
-
-				@if (!String.IsNullOrWhiteSpace(Model.Twitter))
-				{
-					<div class="row">
-						<div class="col-4 text-nowrap"><span class="icon-twitter"></span> Twitter</div>
-						<div class="col-8"><a href="https://twitter.com/@Model.Twitter" target="_blank">&#64;@Model.Twitter</a></div>
-					</div>
-				}
-
-				@if (!String.IsNullOrWhiteSpace(Model.Instagram))
-				{
-					<div class="row">
-						<div class="col-4 text-nowrap"><span class="icon-instagram"></span> Instagram</div>
-						<div class="col-8"><a href="https://www.instagram.com/@Model.Instagram" target="_blank">@Model.Instagram</a></div>
-					</div>
-				}
-
-				@if (!String.IsNullOrWhiteSpace(Model.Web))
-				{
-					<div class="row">
-						<div class="col-4">@PopForums.Resources.Web</div>
-						<div class="col-8"><a href="@Model.Web" target="_blank">@Model.Web</a></div>
-					</div>
-				}
-
-				<div class="row">
-					<div class="col-4">@PopForums.Resources.ScoringGame</div>
-					<div class="col-8">@Model.Points.ToString("N0")</div>
-				</div>
 			</div>
 
 			@if (Model.ImageID.HasValue && Model.IsImageApproved)

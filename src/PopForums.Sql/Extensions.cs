@@ -49,7 +49,7 @@ namespace PopForums.Sql
 				{
 					await connection.OpenAsync();
 					await action(connection);
-				}
+				}	
 				finally
 				{
 					connection.Close();
@@ -70,7 +70,6 @@ namespace PopForums.Sql
 			services.AddTransient<IEmailQueueRepository, EmailQueueRepository>();
 			services.AddTransient<IErrorLogRepository, ErrorLogRepository>();
 			services.AddTransient<IEventDefinitionRepository, EventDefinitionRepository>();
-			services.AddTransient<IExternalUserAssociationRepository, ExternalUserAssociationRepository>();
 			services.AddTransient<IFavoriteTopicsRepository, FavoriteTopicsRepository>();
 			services.AddTransient<IFeedRepository, FeedRepository>();
 			services.AddTransient<IForumRepository, ForumRepository>();
@@ -97,6 +96,8 @@ namespace PopForums.Sql
 			services.AddTransient<IUserRepository, UserRepository>();
 			services.AddTransient<IUserSessionRepository, UserSessionRepository>();
 			services.AddTransient<IServiceHeartbeatRepository, ServiceHeartbeatRepository>();
+			services.AddTransient<ITibiaRepository, TibiaRepository>();
+			services.AddTransient<IAwardImageRepository, AwardImageRepository >();
 		}
 
 		public static object GetObjectOrDbNull(this object value)

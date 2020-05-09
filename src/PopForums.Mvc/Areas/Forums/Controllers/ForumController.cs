@@ -10,13 +10,14 @@ using PopForums.Services;
 using PopForums.Extensions;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.Mvc.Areas.Forums.Extensions;
+using PopForums.ScoringGame;
 
 namespace PopForums.Mvc.Areas.Forums.Controllers
 {
 	[Area("Forums")]
 	public class ForumController : Controller
 	{
-		public ForumController(ISettingsManager settingsManager, IForumService forumService, ITopicService topicService, IPostService postService, ITopicViewCountService topicViewCountService, ISubscribedTopicsService subService, ILastReadService lastReadService, IFavoriteTopicService favoriteTopicService, IProfileService profileService, IUserRetrievalShim userRetrievalShim, ITopicViewLogService topicViewLogService, IPostMasterService postMasterService, IForumPermissionService forumPermissionService)
+		public ForumController(ISettingsManager settingsManager, IForumService forumService, ITopicService topicService, IPostService postService, ITopicViewCountService topicViewCountService, ISubscribedTopicsService subService, ILastReadService lastReadService, IFavoriteTopicService favoriteTopicService, IProfileService profileService, IUserRetrievalShim userRetrievalShim, ITopicViewLogService topicViewLogService, IPostMasterService postMasterService, IForumPermissionService forumPermissionService, IUserService userService, IUserAwardService userAwardService, ITibiaService tibiaService)
 		{
 			_settingsManager = settingsManager;
 			_forumService = forumService;
@@ -31,6 +32,9 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			_topicViewLogService = topicViewLogService;
 			_postMasterService = postMasterService;
 			_forumPermissionService = forumPermissionService;
+			_userService = userService;
+			_userAwardService = userAwardService;
+			_tibiaService = tibiaService;
 		}
 
 		public static string Name = "Forum";
@@ -48,6 +52,9 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly ITopicViewLogService _topicViewLogService;
 		private readonly IPostMasterService _postMasterService;
 		private readonly IForumPermissionService _forumPermissionService;
+		private readonly IUserService _userService;
+		private readonly IUserAwardService _userAwardService;
+		private readonly ITibiaService _tibiaService;
 
 		public async Task<ActionResult> Index(string urlName, int pageNumber = 1)
 		{
@@ -89,9 +96,14 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				return Content(Resources.ForumNoView);
 			if (!permissionContext.UserCanPost)
 				return Content(Resources.ForumNoPost);
-
 			var profile = await _profileService.GetProfile(user);
-			var newPost = new NewPost { ItemID = forum.ForumID, IncludeSignature = profile.Signature.Length > 0, IsPlainText = profile.IsPlainText, IsImageEnabled = _settingsManager.Current.AllowImages };
+			var newPost = new NewPost
+			{
+				ItemID = forum.ForumID,
+				IncludeSignature = profile.Signature.Length > 0,
+				IsPlainText = profile.IsPlainText,
+				IsImageEnabled = _settingsManager.Current.AllowImages
+			};
 			return View("NewTopic", newPost);
 		}
 
@@ -197,8 +209,10 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				return NotFound();
 			var signatures = await _profileService.GetSignatures(posts);
 			var avatars = await _profileService.GetAvatars(posts);
-			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
-			var container = ComposeTopicContainer(topic, forum, permissionContext, isSubscribed, posts, pagerContext, isFavorite, signatures, avatars, votedIDs, lastReadTime);
+			var votedIDs = await _postService.GetVotedPostIDs(user, posts); 
+			var awards = await _userAwardService.GetAllAwards(posts); 
+			var onlineStatistics = await _tibiaService.GetOnlineStatistics();
+			var container = ComposeTopicContainer(topic, forum, permissionContext, isSubscribed, posts, pagerContext, isFavorite, signatures, avatars, votedIDs, lastReadTime, awards, onlineStatistics);
 			await _topicViewCountService.ProcessView(topic);
 			await _topicViewLogService.LogView(user?.UserID, topic.TopicID);
 			if (adapter.IsAdapterEnabled)
@@ -244,7 +258,9 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var signatures = await _profileService.GetSignatures(posts);
 			var avatars = await _profileService.GetAvatars(posts);
 			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
-			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime);
+			var awards = await _userAwardService.GetAllAwards(posts);
+			var onlineStatistics = await _tibiaService.GetOnlineStatistics();
+			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime, awards, onlineStatistics);
 			await _topicViewCountService.ProcessView(topic);
 			ViewBag.Low = low;
 			ViewBag.High = high;
@@ -261,7 +277,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				return Content(Resources.TopicNotExist);
 			var forum = await _forumService.Get(topic.ForumID);
 			if (forum == null)
-				throw new Exception(String.Format("TopicID {0} references ForumID {1}, which does not exist.", topic.TopicID, topic.ForumID));
+				throw new Exception($"TopicID {topic.TopicID} references ForumID {topic.ForumID}, which does not exist.");
 			if (topic.IsClosed)
 				return Content(Resources.Closed);
 			var permissionContext = await _forumPermissionService.GetPermissionContext(forum, user, topic);
@@ -301,7 +317,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var user = _userRetrievalShim.GetUser();
 			var userProfileUrl = Url.Action("ViewProfile", "Account", new { id = user.UserID });
 			string TopicLinkGenerator(Topic t) => this.FullUrlHelper("GoToNewestPost", Name, new { id = t.TopicID });
-			string UnsubscribeLinkGenerator(User u, Topic t) => this.FullUrlHelper("Unsubscribe", SubscriptionController.Name, new {topicID = t.TopicID, authKey = u.AuthorizationKey});
+			string UnsubscribeLinkGenerator(User u, Topic t) => this.FullUrlHelper("Unsubscribe", SubscriptionController.Name, new {topicID = t.TopicID, userID = user.UserID, hash = _profileService.GetUnsubscribeHash(user)});
 			string PostLinkGenerator(Post p) => Url.Action("PostLink", "Forum", new {id = p.PostID});
 			string RedirectLinkGenerator(Post p) => Url.RouteUrl(new {controller = "Forum", action = "PostLink", id = p.PostID});
 			var ip = HttpContext.Connection.RemoteIpAddress.ToString();
@@ -324,10 +340,22 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var signatures = await _profileService.GetSignatures(postList);
 			var avatars = await _profileService.GetAvatars(postList);
 			var votedPostIDs = await _postService.GetVotedPostIDs(user, postList);
+			var awards = await _userAwardService.GetAllAwards(postList);
+			var onlineStatistics = await _tibiaService.GetOnlineStatistics();
 			ViewData["PopForums.Identity.CurrentUser"] = user; // TODO: what is this used for?
 			if (user != null)
 				await _lastReadService.MarkTopicRead(user, topic);
-			return View("PostItem", new PostItemContainer { Post = post, Avatars = avatars, Signatures = signatures, VotedPostIDs = votedPostIDs, Topic = topic, User = user });
+			return View("PostItem", new PostItemContainer
+			{
+				Post = post,
+				Avatars = avatars,
+				Signatures = signatures,
+				VotedPostIDs = votedPostIDs,
+				Topic = topic,
+				User = user,
+				Awards = awards,
+				OnlineStatistics = onlineStatistics
+			});
 		}
 		
 		public async Task<ViewResult> Recent(int pageNumber = 1)
@@ -479,7 +507,9 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var signatures = await _profileService.GetSignatures(posts);
 			var avatars = await _profileService.GetAvatars(posts);
 			var votedIDs = await _postService.GetVotedPostIDs(user, posts);
-			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime);
+			var awards = await _userAwardService.GetAllAwards(posts);
+			var onlineStatistics = await _tibiaService.GetOnlineStatistics();
+			var container = ComposeTopicContainer(topic, forum, permissionContext, false, posts, pagerContext, false, signatures, avatars, votedIDs, lastReadTime, awards, onlineStatistics);
 			ViewBag.Low = lowPage;
 			ViewBag.High = pagerContext.PageCount;
 			return View("TopicPage", container);
@@ -522,9 +552,9 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return Content(result, "text/html");
 		}
 
-		private static TopicContainer ComposeTopicContainer(Topic topic, Forum forum, ForumPermissionContext permissionContext, bool isSubscribed, List<Post> posts, PagerContext pagerContext, bool isFavorite, Dictionary<int, string> signatures, Dictionary<int, int> avatars, List<int> votedPostIDs, DateTime? lastreadTime)
+		private static TopicContainer ComposeTopicContainer(Topic topic, Forum forum, ForumPermissionContext permissionContext, bool isSubscribed, List<Post> posts, PagerContext pagerContext, bool isFavorite, Dictionary<int, string> signatures, Dictionary<int, int> avatars, List<int> votedPostIDs, DateTime? lastreadTime, List<UserAward> awards, List<TibiaCharacterOnlineStatistics> onlineStatistics)
 		{
-			return new TopicContainer { Forum = forum, Topic = topic, Posts = posts, PagerContext = pagerContext, PermissionContext = permissionContext, IsSubscribed = isSubscribed, IsFavorite = isFavorite, Signatures = signatures, Avatars = avatars, VotedPostIDs = votedPostIDs, LastReadTime = lastreadTime };
+			return new TopicContainer { Forum = forum, Topic = topic, Posts = posts, PagerContext = pagerContext, PermissionContext = permissionContext, IsSubscribed = isSubscribed, IsFavorite = isFavorite, Signatures = signatures, Avatars = avatars, VotedPostIDs = votedPostIDs, LastReadTime = lastreadTime, Awards = awards, OnlineStatistics = onlineStatistics };
 		}
 
 		[HttpPost]

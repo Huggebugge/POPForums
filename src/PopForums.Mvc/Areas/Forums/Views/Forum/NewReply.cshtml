@@ -16,12 +16,6 @@
 <div class="postForm" role="form">
 	@Html.HiddenFor(p => p.Title)
 	@Html.TextAreaFor(p => p.FullText, new { @class = "form-control" })
-	<div class="checkbox">
-		<label for="IncludeSignature">
-			@Html.CheckBoxFor(p => p.IncludeSignature)
-			@PopForums.Resources.IncludeSignature
-		</label>
-	</div>
 	@Html.HiddenFor(p => p.ItemID)
 	@Html.HiddenFor(p => p.IsPlainText)
 	@Html.HiddenFor(p => p.IsImageEnabled)

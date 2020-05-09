@@ -10,5 +10,6 @@ namespace PopForums.Repositories
 		Task IssueAward(int userID, string awardDefinitionID, string title, string description, DateTime timeStamp);
 		Task<bool> IsAwarded(int userID, string awardDefinitionID);
 		Task<List<UserAward>> GetAwards(int userID);
+		Task<List<UserAward>> GetAllAwards(List<int> userIds);
 	}
 }

@@ -20,3 +20,4 @@ node_modules
 /src/PopForums.Web/wwwroot/lib/*
 !/src/PopForums.Web/wwwroot/lib/PopForums/src/
 /src/PopForums.Web/wwwroot/lib/PopForums/src/Fonts
+src/PopForums.Web/PopForums.json

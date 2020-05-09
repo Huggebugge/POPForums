@@ -1,5 +1,6 @@
 ﻿using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using PopForums.Mvc.Areas.Forums.Extensions;
 using PopForums.Mvc.Areas.Forums.Services;
 using PopForums.Services;
 
@@ -8,12 +9,13 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 	[Area("Forums")]
 	public class HomeController : Controller
 	{
-		public HomeController(IForumService forumService, IUserService userService, IUserSessionService userSessionService, IUserRetrievalShim userRetrievalShim)
+		public HomeController(IForumService forumService, IUserService userService, IUserSessionService userSessionService, IUserRetrievalShim userRetrievalShim, ITibiaService tibiaService)
 		{
 			_forumService = forumService;
 			_userService = userService;
 			_userSessionService = userSessionService;
 			_userRetrievalShim = userRetrievalShim;
+			_tibiaService = tibiaService;
 		}
 
 		public static string Name = "Home";
@@ -22,6 +24,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 		private readonly IUserService _userService;
 		private readonly IUserSessionService _userSessionService;
 		private readonly IUserRetrievalShim _userRetrievalShim;
+		private readonly ITibiaService _tibiaService;
 
 		public async Task<ViewResult> Index()
 		{
@@ -33,6 +36,8 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			var registeredUsers = await _userService.GetTotalUsers();
 			ViewBag.RegisteredUsers = registeredUsers.ToString("N0");
 			var user = _userRetrievalShim.GetUser();
+			ViewBag.SitemapUrl = this.FullUrlHelper("Index", SitemapController.Name);
+			ViewBag.OnlineMembers = await _tibiaService.GetOnlineMembers();
 			return View(await _forumService.GetCategorizedForumContainerFilteredForUser(user));
 		}
 	}

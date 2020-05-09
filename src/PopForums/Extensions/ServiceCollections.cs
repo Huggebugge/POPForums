@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PopForums.Configuration;
 using PopForums.Email;
-using PopForums.ExternalLogin;
 using PopForums.Feeds;
 using PopForums.ScoringGame;
 using PopForums.Services;
@@ -25,9 +24,6 @@ namespace PopForums.Extensions
 		    services.AddTransient<ISmtpWrapper, SmtpWrapper>();
 		    services.AddTransient<ISubscribedTopicEmailComposer, SubscribedTopicEmailComposer>();
 		    services.AddTransient<IUserEmailer, UserEmailer>();
-
-			// external auth?
-		    services.AddTransient<IExternalUserAssociationManager, ExternalUserAssociationManager>();
 
 			// feeds
 		    services.AddTransient<IFeedService, FeedService>();
@@ -70,6 +66,10 @@ namespace PopForums.Extensions
 		    services.AddTransient<IPostMasterService, PostMasterService>();
 		    services.AddTransient<IForumPermissionService, ForumPermissionService>();
 		    services.AddTransient<IReCaptchaService, ReCaptchaService>();
+		    services.AddTransient<ISitemapService, SitemapService>();
+
+			//Tibia
+			services.AddTransient<ITibiaService, TibiaService>();
 	    }
 
 	    public static void AddPopForumsBackgroundServices(this IServiceCollection services)

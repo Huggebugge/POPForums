@@ -23,7 +23,7 @@ namespace PopForums.Mvc.Areas.Forums.Extensions
 		/// </summary>
 		public static IApplicationBuilder UsePopForumsCultures(this IApplicationBuilder app)
 		{
-			var supportedCultures = new List<CultureInfo> { new CultureInfo("en"), new CultureInfo("de"), new CultureInfo("es"), new CultureInfo("nl"), new CultureInfo("uk"), new CultureInfo("zh-TW") };
+			var supportedCultures = new List<CultureInfo> { new CultureInfo("en")};
 			app.UseRequestLocalization(new RequestLocalizationOptions
 			{
 				DefaultRequestCulture = new RequestCulture("en", "en"),

@@ -19,11 +19,15 @@ else
 			<a asp-controller="@AccountController.Name" asp-action="EditProfile" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.EditProfile</a>
 			<a asp-controller="@AccountController.Name" asp-action="Security" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.ChangeYourEmailPassword</a>
 			<a asp-controller="@AccountController.Name" asp-action="ManagePhotos" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.ManageYourPhotos</a>
-			<a asp-controller="@AccountController.Name" asp-action="ExternalLogins" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.ExternalLogins</a>
 			@if (Model.User.IsInRole(PermanentRoles.Admin))
 			{
 				<div class="dropdown-divider"></div>
 				<a asp-controller="@AdminController.Name" asp-action="App" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.PopForumsAdmin</a>
+			}
+			@if (!Model.User.IsApproved)
+			{
+				<div class="dropdown-divider"></div>
+				<a asp-controller="@AccountController.Name" asp-action="Validate" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.VerifyAccount</a>
 			}
 			<div class="dropdown-divider"></div>
 			<a asp-controller="@IdentityController.Name" asp-action="Logout" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.Logout</a>

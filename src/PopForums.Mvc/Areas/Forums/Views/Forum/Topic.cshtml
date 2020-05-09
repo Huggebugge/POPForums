@@ -48,7 +48,7 @@
 }
 
 @foreach(var post in Model.Posts) {
-	@await Html.PartialAsync("~/Areas/Forums/Views/Forum/PostItem.cshtml", new PostItemContainer { Post = post, VotedPostIDs = Model.VotedPostIDs, Signatures = Model.Signatures, Avatars = Model.Avatars, User = user, Profile = profile, Topic = Model.Topic });
+	@await Html.PartialAsync("~/Areas/Forums/Views/Forum/PostItem.cshtml", new PostItemContainer { Post = post, VotedPostIDs = Model.VotedPostIDs, Signatures = Model.Signatures, Avatars = Model.Avatars, User = user, Profile = profile, Topic = Model.Topic, Awards = Model.Awards, OnlineStatistics = Model.OnlineStatistics });
 }
 
 @if (Model.PagerContext.PageIndex < Model.PagerContext.PageCount)

@@ -61,7 +61,7 @@ namespace PopForums.Sql.Repositories
 		{
 			Task<DateTime?> lastRead = null;
 			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
-				lastRead = connection.QuerySingleOrDefaultAsync<DateTime?>("SELECT LastForumViewDate FROM pf_LastForumView WHERE UserID = @UserID AND ForumID = @ForumID", new { UserID = userID, ForumID = forumID }));
+				lastRead = connection.QueryFirstOrDefaultAsync<DateTime?>("SELECT LastForumViewDate FROM pf_LastForumView WHERE UserID = @UserID AND ForumID = @ForumID", new { UserID = userID, ForumID = forumID }));
 			return lastRead.Result;
 		}
 
@@ -97,7 +97,7 @@ namespace PopForums.Sql.Repositories
 		{
 			Task<DateTime?> time = null;
 			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
-				time = connection.QuerySingleOrDefaultAsync<DateTime?>("SELECT LastTopicViewDate FROM pf_LastTopicView WHERE UserID = @UserID AND TopicID = @TopicID", new { UserID = userID, TopicID = topicID }));
+				time = connection.QueryFirstOrDefaultAsync<DateTime?>("SELECT LastTopicViewDate FROM pf_LastTopicView WHERE UserID = @UserID AND TopicID = @TopicID", new { UserID = userID, TopicID = topicID }));
 			return time.Result;
 		}
 	}

@@ -30,7 +30,32 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			return await SetupImageResult(_imageService.GetUserImageData, _imageService.GetUserImageLastModifcation, id);
 		}
 
+		[PopForumsAuthorizationIgnore]
+		public async Task<ActionResult> AwardImage(string awardId)
+		{
+			return await SetupImageResult(_imageService.GetAwardImageData, _imageService.GetAwardImageLastModifcation, awardId);
+		}
 		private async Task<ActionResult> SetupImageResult(Func<int, Task<byte[]>> imageDataFetch, Func<int, Task<DateTime?>> imageLastMod, int id)
+		{
+			var timeStamp = await imageLastMod(id);
+			if (!timeStamp.HasValue)
+				return NotFound();
+			Response.Headers["Cache-control"] = "public";
+			Response.Headers["Last-modified"] = DateTime.SpecifyKind(timeStamp.Value, DateTimeKind.Utc).ToString("R");
+			if (!string.IsNullOrEmpty(Request.Headers["If-Modified-Since"]))
+			{
+				var provider = CultureInfo.InvariantCulture;
+				var couldParse = DateTime.TryParseExact(Request.Headers["If-Modified-Since"], "r", provider, DateTimeStyles.None, out var lastMod);
+				if (couldParse && lastMod == timeStamp.Value.AddMilliseconds(-timeStamp.Value.Millisecond))
+				{
+					Response.StatusCode = 304;
+					return Content(string.Empty);
+				}
+			}
+			var stream = new MemoryStream(await imageDataFetch(id));
+			return File(stream, "image/jpeg");
+		}
+		private async Task<ActionResult> SetupImageResult(Func<string, Task<byte[]>> imageDataFetch, Func<string, Task<DateTime?>> imageLastMod, string id)
 		{
 			var timeStamp = await imageLastMod(id);
 			if (!timeStamp.HasValue)

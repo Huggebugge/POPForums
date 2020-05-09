@@ -18,16 +18,19 @@ namespace PopForums.Services
 			_searchIndexService = new SearchIndexApplicationService();
 			_awardCalcService = new AwardCalculatorApplicationService();
 			_closeAgedTopicsService = new CloseAgedTopicsApplicationService();
+			_tibiaApplicationService = new TibiaApplicationService();
 			_emailService.Start(serviceProvider);
 			_userSessionService.Start(serviceProvider);
 			_searchIndexService.Start(serviceProvider);
 			_awardCalcService.Start(serviceProvider);
-			_closeAgedTopicsService.Start(serviceProvider);
+			_closeAgedTopicsService.Start(serviceProvider); 
+			_tibiaApplicationService.Start(serviceProvider);
 			ApplicationServices.Add(_emailService);
 			ApplicationServices.Add(_userSessionService);
 			ApplicationServices.Add(_searchIndexService);
 			ApplicationServices.Add(_awardCalcService);
 			ApplicationServices.Add(_closeAgedTopicsService);
+			ApplicationServices.Add(_tibiaApplicationService);
 		}
 
 		private static EmailApplicationService _emailService;
@@ -35,6 +38,7 @@ namespace PopForums.Services
 		private static SearchIndexApplicationService _searchIndexService;
 		private static AwardCalculatorApplicationService _awardCalcService;
 		private static CloseAgedTopicsApplicationService _closeAgedTopicsService;
+		private static TibiaApplicationService _tibiaApplicationService;
 
 		public static readonly List<ApplicationServiceBase> ApplicationServices = new List<ApplicationServiceBase>();
 	}

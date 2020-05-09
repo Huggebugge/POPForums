@@ -7,12 +7,6 @@
 		@Html.TextBoxFor(p => p.Title, new { @class = "form-control", placeholder = PopForums.Resources.Title })
 	</div>
 	@Html.TextAreaFor(p => p.FullText, new { @class = "form-control" })
-	<div class="checkbox">
-		<label for="IncludeSignature">
-			@Html.CheckBoxFor(p => p.IncludeSignature)
-			@PopForums.Resources.IncludeSignature
-		</label>
-	</div>
 	@Html.HiddenFor(p => p.ItemID)
 	@Html.HiddenFor(p => p.IsPlainText)
 	@Html.HiddenFor(p => p.IsImageEnabled)
