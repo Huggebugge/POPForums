@@ -29,7 +29,7 @@
 			{
 				if (Model.OnlineStatistics.Any(o => o.UserID == Model.Post.UserID))
 				{
-					@:Online Time This Week: @Model.OnlineStatistics.Where(o => o.UserID == Model.Post.UserID).Sum(o => o.OnlineTimeThisWeek) minutes-
+					@:Online Time This Week: @Model.OnlineStatistics.Where(o => o.UserID == Model.Post.UserID).Sum(o => o.ThisWeek) minutes-
 				}
 			}
 			<span class="fTime" data-utc="@Model.Post.PostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(Model.Post.PostTime, Model.Profile)</span>
@@ -59,7 +59,6 @@
 			@foreach (var award in Model.Awards.Where(p => p.UserID == Model.Post.UserID))
 			{
 				<img src="@Url.Action("AwardImage", "Image", new { awardId = award.AwardDefinitionID })" alt="@award.Description" class="avatar" />
-				<div title="@award.Description" class="achievement @Html.Raw(award.Title.ToLower())">@Html.Raw(award.Title)</div>
 			}
 		</div>
 	}

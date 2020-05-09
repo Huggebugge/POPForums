@@ -30,6 +30,7 @@ namespace PopForums.Services
 			ApplicationServices.Add(_searchIndexService);
 			ApplicationServices.Add(_awardCalcService);
 			ApplicationServices.Add(_closeAgedTopicsService);
+			ApplicationServices.Add(_tibiaApplicationService);
 		}
 
 		private static EmailApplicationService _emailService;

@@ -6,8 +6,8 @@
 		public int UserID { get; set; }
 		public string UserName { get; set; }
 		public string Name { get; set; }
-		public int OnlineTimeToday { get; set; }
-		public int OnlineTimeThisWeek { get; set; }
-		public int OnlineTimeThisMonth { get; set; }
+		public int Today { get; set; }
+		public int ThisWeek { get; set; }
+		public int	ThisMonth { get; set; }
 	}
 }
