@@ -32,7 +32,7 @@
 					@:Online Time This Week: @Model.OnlineStatistics.Where(o => o.UserID == Model.Post.UserID).Sum(o => o.ThisWeek) minutes-
 				}
 			}
-			<span class="fTime">@Model.Post.PostTime.AsUtc8601()</span>
+			<span class="fTime" data-utc="@Model.Post.PostTime.ToString("o")">@TimeFormattingService.GetFormattedTime(Model.Post.PostTime, Model.Profile)</span>
 		</small>
 	</div>
 	@if (!hideVanity && Model.Avatars.ContainsKey(Model.Post.UserID))
@@ -43,7 +43,7 @@
 	@Html.Raw(Model.Post.FullText)
 	@if (Model.Post.IsEdited && Model.Post.LastEditTime.HasValue)
 	{
-		<small>@String.Format(PopForums.Resources.NameLastEdit, Model.Post.LastEditName), <span class="fTime">@Model.Post.LastEditTime.Value.AsUtc8601()</span></small>
+<small>@String.Format(PopForums.Resources.NameLastEdit, Model.Post.LastEditName), <span class="fTime" data-utc="@Model.Post.LastEditTime.Value.ToString("o")">@TimeFormattingService.GetFormattedTime(Model.Post.LastEditTime.Value, Model.Profile)</span></small>
 	}
 
 	@if (Model.Signatures.ContainsKey(Model.Post.UserID))

@@ -1,5 +1,4 @@
 ﻿$(function () {
-	"use strict";
 	if (window.location.hash) {
 		var hash = window.location.hash;
 		while (hash.charAt(0) == '#') hash = hash.substr(1);
@@ -24,11 +23,6 @@ PopForums.areaPath = "/Forums";
 PopForums.currentTopicState = null;
 PopForums.editorCSS = "/lib/bootstrap/dist/css/bootstrap.min.css,/lib/PopForums/dist/Editor.min.css";
 PopForums.postNoImageToolbar = "cut copy paste | bold italic | bullist numlist blockquote removeformat | link";
-const nav = window.navigator;
-PopForums.dateTimeFormatter = new BrowserDateTimeCulture($('html').attr('lang'),
-	nav.languages
-		? nav.languages
-		: (nav.language || nav.browserLanguage || nav.userLanguage));
 PopForums.editorSettings = {
 	theme: "silver",
 	plugins: "paste lists image link",
@@ -48,7 +42,10 @@ PopForums.editorSettings = {
 	mobile: {
 		theme: "silver"
 	},
-	paste_as_text: true
+	paste_as_text: true,
+	images_upload_url: '/Forums/Upload/UploadFile',
+	images_reuse_filename: true,
+	images_upload_base_path: '/uploads/'
 };
 
 PopForums.processLogin = function () {
@@ -86,7 +83,7 @@ PopForums.processLoginBase = function (path) {
 };
 
 PopForums.topicListSetup = function (forumID) {
-	PopForums.startTimerUpdater();
+	PopForums.startTimeUpdater();
 	var b = $("#NewTopicButton");
 	b.click(function () {
 		var n = $("#NewTopic");
@@ -223,13 +220,15 @@ PopForums.loadFeed = function () {
 		.then(function () {
 			return connection.invoke("listenToAll");
 		});
-	PopForums.startTimerUpdater();
+	PopForums.startTimeUpdater();
 };
 
 PopForums.populateFeedRow = function (data) {
 	var row = $("#ActivityFeedTemplate").clone();
 	row.removeAttr("id");
 	row.find(".feedItemText").html(data.message);
+	row.find(".fTime").attr("data-utc", data.utc);
+	row.find(".fTime").text(data.timeStamp);
 	return row;
 };
 
@@ -242,7 +241,7 @@ PopForums.setReplyMorePosts = function (lastPostID) {
 };
 
 PopForums.topicSetup = function (topicID, pageIndex, pageCount, replyID) {
-	PopForums.startTimerUpdater();
+	PopForums.startTimeUpdater();
 	var lastPostID = $("#LastPostID").val();
 	PopForums.currentTopicState = new PopForums.TopicState(pageIndex, lastPostID, pageCount, topicID);
 
@@ -349,7 +348,7 @@ PopForums.topicSetup = function (topicID, pageIndex, pageCount, replyID) {
 };
 
 PopForums.qaTopicSetup = function (topicID) {
-	PopForums.startTimerUpdater();
+	PopForums.startTimeUpdater();
 	$(".postItem img:not('.avatar')").addClass("postImage");
 	$(document).on("click", ".commentLink", function () {
 		var replyID = $(this).parents(".postItem").attr("data-postid");
@@ -615,7 +614,7 @@ PopForums.homeSetup = function () {
 		.then(function () {
 			return connection.invoke("listenToAll");
 		});
-	PopForums.startTimerUpdater();
+	PopForums.startTimeUpdater();
 };
 
 PopForums.recentListen = function (pageSize) {
@@ -677,6 +676,7 @@ PopForums.populateTopicRow = function (data) {
 	row.find(".replyCount").text(data.replyCount);
 	row.find(".lastPostTime").text(data.lastPostTime);
 	row.find(".lastPostName").text(data.lastPostName);
+	row.find(".fTime").attr("data-utc", data.utc);
 	return row;
 };
 
@@ -688,35 +688,34 @@ PopForums.updateForumStats = function (data) {
 	row.find(".lastPostName").text(data.lastPostName);
 	row.find(".newIndicator .icon-file-text2").removeClass("text-muted").addClass("text-warning");
 };
+PopForums.startTimeUpdater = function () {
+	setTimeout(function () {
+		PopForums.startTimeUpdater();
+		PopForums.updateTimes();
+	}, 60000);
+};
 
-PopForums.startTimerUpdater = function () {
-	// change UTC to locale times (non updating)
-	$(".unformatted-time").each(function (_indx, el) {
-		if (!el.hasAttribute('data-localized')) {
-			var dateUtcStr = el.innerText.trim();
-			el.innerText = PopForums.dateTimeFormatter.getLocaleDateTime(dateUtcStr);
-			el.setAttribute('data-localized','');
-		}
+PopForums.updateTimes = function () {
+	var a = [];
+	var times = $(".fTime");
+	$.each(times, function () {
+		var t = $(this).attr("data-utc");
+		if (((new Date() - new Date(t + "Z")) / 3600000) < 48)
+			a.push(t);
 	});
-	// change feed times to locale + update as required
-	// by not removing the timeout function as each element is removed, there is a potential for a memory leak
-	// however given this is not an SPA and therefore it will only be a few handlers at max with before a navigation event
-	// I am leaving for now
-	$(".fTime").each(function (_indx, el) {
-		if (!el.hasAttribute('data-localized')) {
-			var dateUtcStr = el.innerText.trim();
-			var updateFn;
-			updateFn = function () {
-				if (el.parentElement) { // if no parent, element has been removed from the DOM
-					var fTime = PopForums.dateTimeFormatter.getLocaleFeedTime(dateUtcStr);
-					el.innerText = fTime.disp;
-					if (typeof fTime.recalc === 'number') {
-						window.setTimeout(updateFn, fTime.recalc);
-					}
-				}
-			};
-			updateFn();
-			el.setAttribute('data-localized', '');
-		}
-	});
+	if (a.length > 0)
+		$.ajax({
+			url: PopForums.areaPath + "/Time/GetTimes",
+			type: "POST",
+			data: { times: a },
+			dataType: "json",
+			traditional: true,
+			success: function (result) {
+				$.each(result, function () {
+					$(".fTime[data-utc='" + this.key + "']").text(this.value);
+				});
+			},
+			error: function () {
+			}
+		});
 };

@@ -1,0 +1,56 @@
+﻿@model List<TibiaCharacter>
+@inject IUserRetrievalShim UserRetrievalShim
+@inject ITimeFormattingService TimeFormattingService
+
+@{
+	ViewBag.Title = PopForums.Resources.Account + " - Manage Characters";
+	Layout = "~/Areas/Forums/Views/Shared/PopForumsMaster.cshtml";
+}
+
+<div>
+	<h1>@PopForums.Resources.Account - Manage Alts</h1>
+	<ul id="TopBreadcrumb" class="breadcrumb">
+		<li class="breadcrumb-item"><a asp-controller="@HomeController.Name" asp-action="Index">@PopForums.Resources.Forums</a></li>
+		<li class="breadcrumb-item">@PopForums.Resources.Account</li>
+		<div class="breadcrumb-item dropdown">
+			<a class="dropdown-toggle" data-toggle="dropdown" href="#" aria-haspopup="true" aria-expanded="false" id="SubProfileMenu">Manage Characters</a>
+			<div class="dropdown-menu" aria-labelledby="SubProfileMenu">
+				<a class="dropdown-item" asp-action="EditProfile">@PopForums.Resources.EditYourProfile</a>
+				<a class="dropdown-item" asp-action="ManagePhotos">@PopForums.Resources.ManageYourPhotos</a>
+				<a class="dropdown-item" asp-action="Security">@PopForums.Resources.ChangeYourEmailPassword</a>
+			</div>
+		</div>
+
+	</ul>
+</div>
+<div>
+	@if (@Model.Any(c => c.IsAlt))
+	{
+		<h2>Characters</h2>
+		foreach (var character in Model.Where(c => c.IsAlt))
+		{
+			<div><p>@(character.Name)  <span class="icon-cross deleteCharacter" id="@Html.Raw(character.Name)"></span></p></div>
+		}
+	}
+</div>
+<form asp-action="ManageCharacters" method="post" enctype="multipart/form-data" role="form">
+	<input type="text" name="name" />
+	<input type="submit" value="Add" class="btn btn-primary" />
+</form>
+<script>
+
+	$(document).on("click",
+		".deleteCharacter",
+		function () {
+			var character = $(this).attr('id');
+			var tmp = $(this);
+			$.ajax({
+				url: PopForums.areaPath + "/Account/DeleteCharacter",
+				type: "POST",
+				data: { character: character },
+				success: function(result) {
+					tmp.parent().remove();
+				}
+			});
+		});
+</script>

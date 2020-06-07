@@ -28,7 +28,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PopForums.AwsKit", "src\Pop
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PopForums.AzureKit.Functions", "src\PopForums.AzureKit.Functions\PopForums.AzureKit.Functions.csproj", "{D50E69CC-5070-41DD-A881-20D29B1913EE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UtilProject", "UtilProject\UtilProject.csproj", "{3A9F7F18-3D2F-4D2E-ACCC-51E80D3CF130}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UtilProject", "UtilProject\UtilProject.csproj", "{3A9F7F18-3D2F-4D2E-ACCC-51E80D3CF130}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

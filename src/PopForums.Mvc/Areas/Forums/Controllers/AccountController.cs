@@ -146,6 +146,7 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 				modelState.AddModelError("Email", Resources.EmailBanned);
 			if (await _userService.IsIPBanned(ip))
 				modelState.AddModelError("Email", Resources.IPBanned);
+			
 
 		}
 
@@ -458,6 +459,39 @@ namespace PopForums.Mvc.Areas.Forums.Controllers
 			if (user == null || (await _profileService.Unsubscribe(user, key) == false))
 				return View("UnsubscribeFailure");
 			return View();
+		}
+		public ViewResult ManageCharacters()
+		{
+			var user = _userRetrievalShim.GetUser();
+			if (user == null)
+				return View("EditAccountNoUser");
+			var alts = _tibiaService.GetUserCharacters(user).Result;
+			return View(alts);
+		}
+		[HttpPost]
+		public ViewResult ManageCharacters(string name)
+		{
+			var user = _userRetrievalShim.GetUser();
+			if (user == null)
+				return View("EditAccountNoUser");
+			var chars = _tibiaService.GetUserCharacters(user).Result;
+			if (!chars.Exists(c => c.Name == name))
+				_tibiaService.AddCharacter(new TibiaCharacter { Name = name, User = user, Level = 0, IsAlt = true });
+			var alts = _tibiaService.GetUserCharacters(user).Result;
+			return View(alts);
+		}
+
+		[HttpPost]
+		public JsonResult DeleteCharacter(string character)
+		{
+			var user = _userRetrievalShim.GetUser();
+			if (user == null)
+				return Json(new BasicJsonMessage { Message = "Not logged in", Result = false });
+			var chars = _tibiaService.GetUserCharacters(user).Result;
+			if (!chars.Exists(c => c.Name == character))
+				return Json(new BasicJsonMessage { Message = "Not your character", Result = false });
+			_tibiaService.DeleteUserCharacter(character);
+			return Json(new BasicJsonMessage { Message = "Character deleted", Result = true });
 		}
 	}
 }

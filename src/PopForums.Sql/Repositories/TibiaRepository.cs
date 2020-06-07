@@ -41,7 +41,7 @@ namespace PopForums.Sql.Repositories
 		public async void UpdateCharacter(TibiaCharacter character)
 		{
 			await _sqlObjectFactory.GetConnection().UsingAsync(connection =>
-				connection.ExecuteAsync("UPDATE TibiaCharacter SET Level = @Level, Name = @Name, IsAlt = @Alt WHERE CharacterID = @Character", new
+				connection.ExecuteAsync("UPDATE TibiaCharacter SET Level = @Level, Name = @Name, IsAlt = @Alt WHERE CharacterID = @CharacterId", new
 				{
 					character.Level,
 					character.Name,

@@ -20,6 +20,8 @@ namespace PopForums.Services
 		Task<List<TibiaCharacterOnlineStatistics>> GetOnlineStatistics(); 
 		Task<List<TibiaCharacter>> GetOnlineMembers(); 
 		void LogOnlineTime(TibiaCharacter character);
+		Task<List<TibiaCharacter>> GetUserCharacters(User user);
+		void DeleteUserCharacter(string character);
 	}
 	public class TibiaService : ITibiaService
 	{
@@ -49,7 +51,6 @@ namespace PopForums.Services
 
 		public List<TibiaCharacter> GetOnlineCharactersFromTibia()
 		{
-			//TODO: FIXA SKITEN
 			var chars = new List<TibiaCharacter>();
 			using (var w = new WebClient())
 			{
@@ -102,6 +103,16 @@ namespace PopForums.Services
 		public void UpdateCharacter(TibiaCharacter character)
 		{
 			_tibiaRepository.UpdateCharacter(character);
+		}
+
+		public Task<List<TibiaCharacter>> GetUserCharacters(User user)
+		{
+			return _tibiaRepository.GetCharactersByUserID(user.UserID);
+		}
+
+		public void DeleteUserCharacter(string character)
+		{
+			_tibiaRepository.DeleteUserCharacter(character);
 		}
 	}
 }

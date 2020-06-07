@@ -19,6 +19,7 @@ else
 			<a asp-controller="@AccountController.Name" asp-action="EditProfile" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.EditProfile</a>
 			<a asp-controller="@AccountController.Name" asp-action="Security" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.ChangeYourEmailPassword</a>
 			<a asp-controller="@AccountController.Name" asp-action="ManagePhotos" asp-route-area="Forums" class="dropdown-item">@PopForums.Resources.ManageYourPhotos</a>
+			<a asp-controller="@AccountController.Name" asp-action="ManageCharacters" asp-route-area="Forums" class="dropdown-item">Manage Characters</a>
 			@if (Model.User.IsInRole(PermanentRoles.Admin))
 			{
 				<div class="dropdown-divider"></div>

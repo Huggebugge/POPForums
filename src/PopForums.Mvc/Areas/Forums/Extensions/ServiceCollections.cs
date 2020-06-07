@@ -50,13 +50,7 @@ namespace PopForums.Mvc.Areas.Forums.Extensions
 				return services;
 
 			services.AddAuthentication()
-				.AddCookie(PopForumsAuthorizationDefaults.AuthenticationScheme,
-					option =>
-						{
-							option.ExpireTimeSpan = new TimeSpan(365, 0, 0, 0);
-							option.LoginPath = "/Forums/Account/Login";//This should login page path
-							option.LogoutPath = "/Forums/Identity/Logout";//This should logout page path
-						});
+				.AddCookie(PopForumsAuthorizationDefaults.AuthenticationScheme, option => option.ExpireTimeSpan = new TimeSpan(365, 0, 0, 0));
 
 			return services;
 		}
